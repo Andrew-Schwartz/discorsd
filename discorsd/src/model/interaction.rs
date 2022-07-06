@@ -24,18 +24,23 @@ use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::serde_utils::{self, BoolExt};
 use crate::BotState;
+use crate::model::locales::Locale;
 
 mod validate {
     use once_cell::sync::Lazy;
     use regex::Regex;
 
-    static NAME_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\w-]{1,32}$").unwrap());
+    static NAME_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[-_\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$").unwrap());
 
     pub fn name(name: &str) {
         assert!(
             NAME_REGEX.is_match(name),
-            "names must only contain letters, numbers, `-`, and `_` and must be 1-32 characters long; name = `{:?}`",
-            name
+            "names must only contain letters, numbers, `-`, and `_` and must be 1-32 characters long; name = `{:?}`", name
+        );
+        assert!(
+            name.chars()
+                .all(|c| !c.is_uppercase()),
+            "all characters in names must be lowercase if it has a lowercase variant; name = {:?}", name
         );
     }
 
@@ -855,22 +860,33 @@ mod tests {
 pub struct ApplicationCommand {
     /// unique id of the command
     pub id: CommandId,
-    // todo should this be serde(default)?
     /// the type of command, defaults `1` if not set
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default)]
     pub kind: Option<ApplicationCommandType>,
     /// unique id of the parent application
     pub application_id: ApplicationId,
     /// guild id of the command, if not global
     pub guild_id: Option<GuildId>,
-    /// 3-32 character name
+    /// Name of command
     pub name: String,
+    /// Localization dictionary for name field. Values follow the same restrictions as name
+    pub name_localization: HashMap<Locale, String>,
     /// 1-100 character description
     pub description: String,
-    /// the parameters for the command
+    /// Localization dictionary for description field. Values follow the same restrictions as description
+    pub description_localizations: HashMap<Locale, String>,
+    // todo maybe enforce that?
+    /// the parameters for the command. ONLY ALLOWED FOR CHAT COMMANDS
     #[serde(default)]
     pub options: Vec<ApplicationCommandOption>,
+    /// Set of permissions represented as a bit set
+    pub default_member_permissions: Option<Permissions>,
+    /// Indicates whether the command is available in DMs with the app, only for globally-scoped
+    /// commands. By default, commands are visible.
+    #[serde(default = "serde_utils::default_true")]
+    pub dm_permission: bool,
     /// whether the command is enabled by default when the app is added to a guild
+    #[deprecated]
     #[serde(default = "serde_utils::default_true")]
     pub default_permissions: bool,
 }
@@ -884,6 +900,12 @@ serde_repr! {
         User = 2,
         /// A UI-based command that shows up when you right click or tap on a message
         Message = 3,
+    }
+}
+
+impl Default for ApplicationCommandType {
+    fn default() -> Self {
+        Self::ChatInput
     }
 }
 
@@ -929,6 +951,8 @@ serde_repr! {
         Mentionable = 9,
         /// Any double between -2^53 and 2^53
         Number = 10,
+        /// [Attachment](super::message::Attachment)
+        Attachment = 11,
     }
 }
 
@@ -1589,7 +1613,7 @@ pub enum InteractionResponse {
     /// not see a loading state
     DeferredUpdateMessage,
     /// for components ONLY, edit the message the component was attached to
-    UpdateMessage,
+    UpdateMessage(InteractionMessage),
 }
 
 impl Serialize for InteractionResponse {
@@ -1606,7 +1630,7 @@ impl Serialize for InteractionResponse {
             Self::ChannelMessageWithSource(m) => Shim { kind: 4, data: Some(m) },
             Self::DeferredChannelMessageWithSource => Shim { kind: 5, data: None },
             Self::DeferredUpdateMessage => Shim { kind: 6, data: None },
-            Self::UpdateMessage => Shim { kind: 7, data: None },
+            Self::UpdateMessage(m) => Shim { kind: 7, data: Some(m) },
         };
 
         shim.serialize(s)
@@ -1736,7 +1760,12 @@ impl InteractionMessage {
         self.flags.set(MessageFlags::EPHEMERAL, true);
     }
 
-    // todo finalize how this all works
+    pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
+        where B: Send + Sync + 'static,
+              Btn: ButtonCommand<Bot=B> + 'static,
+    {
+        self.buttons(state, [Box::new(button) as _])
+    }
 
     pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
         where B: Send + Sync + 'static,

@@ -254,7 +254,7 @@ impl MessageReference {
 }
 
 bitflags! {
-    pub struct MessageFlags: u8 {
+    pub struct MessageFlags: u16 {
         /// this message has been published to subscribed channels (via Channel Following)
 		const CROSSPOSTED = 1 << 0;
         /// this message originated from a message in another channel (via Channel Following)
@@ -267,10 +267,17 @@ bitflags! {
 		const URGENT = 1 << 4;
 		/// Only usable on interaction responses I think??
 		const EPHEMERAL = 1 << 6;
-		const UNKNOWN = 1 << 7;
+        /// this message is an Interaction Response and the bot is "thinking"
+		const LOADING = 1 << 7;
+        /// this message failed to mention some roles and add their members to the thread
+        const FAILED_TO_MENTION_SOME_ROLES_IN_THREAD = 1 << 8;
+        /// Undocumented so far
+        const UNKNOWN_512 = 1 << 10;
+        /// Undocumented so far
+        const UNKNOWN_1024 = 1 << 10;
     }
 }
-serde_bitflag!(MessageFlags: u8);
+serde_bitflag!(MessageFlags: u16);
 impl Default for MessageFlags {
     fn default() -> Self {
         Self::empty()

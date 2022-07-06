@@ -196,6 +196,8 @@ impl Cache {
 }
 
 #[derive(Debug)]
+// todo remove when rust remembers that formatting this struct uses it 🙃
+#[allow(dead_code)]
 pub struct DebugCache<'a> {
     user: RwLockReadGuard<'a, Option<User>>,
     application: Option<&'a PartialApplication>,

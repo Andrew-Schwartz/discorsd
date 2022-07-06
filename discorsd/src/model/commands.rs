@@ -59,13 +59,16 @@ pub struct SlashCommandData {
 
 impl InteractionPayload for SlashCommandData {}
 
+pub trait ComponentData {}
+impl<C: ComponentData> InteractionPayload for C {}
+
 // todo
 #[derive(Debug, Clone, PartialEq)]
 pub struct ButtonPressData {
     pub custom_id: ComponentId,
 }
 
-impl InteractionPayload for ButtonPressData {}
+impl ComponentData for ButtonPressData {}
 
 #[derive(Debug, Clone)]
 pub struct MenuSelectData<Data=String> {
@@ -73,7 +76,7 @@ pub struct MenuSelectData<Data=String> {
     pub values: Vec<Data>,
 }
 
-impl<D> InteractionPayload for MenuSelectData<D> {}
+impl<D> ComponentData for MenuSelectData<D> {}
 
 #[async_trait]
 pub trait FinalizeInteraction<Data: InteractionPayload> {
@@ -284,6 +287,33 @@ impl<Data: InteractionPayload> InteractionUse<Data, Deferred> {
     }
 }
 
+impl<C: ComponentData, U: Usability> InteractionUse<C, U>
+    where InteractionUse<C, Used>: From<InteractionUse<C, U>>,
+{
+    pub async fn update<Client, Message>(self, client: Client, message: Message) -> ClientResult<InteractionUse<C, Used>>
+        where Client: AsRef<DiscordClient> + Send,
+              Message: Into<InteractionMessage> + Send,
+    {
+        let client = client.as_ref();
+        client.create_interaction_response(
+            self.id,
+            &self.token,
+            InteractionResponse::UpdateMessage(message.into()),
+        ).await.map(|_| self.into())
+    }
+
+    pub async fn defer_update<Client>(self, client: Client) -> ClientResult<InteractionUse<C, Used>>
+        where Client: AsRef<DiscordClient> + Send,
+    {
+        let client = client.as_ref();
+        client.create_interaction_response(
+            self.id,
+            &self.token,
+            InteractionResponse::DeferredUpdateMessage,
+        ).await.map(|_| self.into())
+    }
+}
+
 impl<Data: InteractionPayload + Sync, U: NotUnused + Sync> InteractionUse<Data, U> {
     pub async fn get_message(
         &self,
@@ -306,6 +336,12 @@ impl<Data: InteractionPayload + Sync, U: NotUnused + Sync> InteractionUse<Data, 
         }
     }
 }
+
+// impl<Data: InteractionPayload, Use: Usability> From<InteractionUse<Data, Use>> for InteractionUse<Data, Used> {
+//     fn from(InteractionUse { id, application_id, data, channel, source, token, _priv }: InteractionUse<Data, Use>) -> Self {
+//         Self { id, application_id, data, channel, source, token, _priv: PhantomData }
+//     }
+// }
 
 #[allow(clippy::use_self)]
 impl<Data: InteractionPayload> From<InteractionUse<Data, Unused>> for InteractionUse<Data, Used> {

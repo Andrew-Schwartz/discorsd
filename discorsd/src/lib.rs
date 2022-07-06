@@ -46,3 +46,9 @@ pub mod errors;
 pub mod http;
 pub mod model;
 pub mod shard;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_compilation() {}
+}

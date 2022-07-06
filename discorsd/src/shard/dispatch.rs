@@ -843,29 +843,29 @@ impl Update for GuildRoleDelete {
 #[derive(Deserialize, Debug, Clone)]
 pub struct InviteCreate {
     /// the channel the invite is for
-    pub(crate) channel_id: ChannelId,
+    pub channel_id: ChannelId,
     /// the unique invite code
-    pub(crate) code: String,
+    pub code: String,
     /// the time at which the invite was created
-    pub(crate) created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     /// the guild of the invite
-    pub(crate) guild_id: Option<GuildId>,
+    pub guild_id: Option<GuildId>,
     /// the user that created the invite
-    pub(crate) inviter: Option<User>,
+    pub inviter: Option<User>,
     /// how long the invite is valid for (in seconds)
     // todo deserialize as Duration
-    pub(crate) max_age: i32,
+    pub max_age: i32,
     /// the maximum number of times the invite can be used
-    pub(crate) max_uses: u32,
+    pub max_uses: u32,
     /// the target user for this invite
-    pub(crate) target_user: Option<User>,
+    pub target_user: Option<User>,
     /// the type of user target for this invite
     // todo model Invite: https://discord.com/developers/docs/resources/invite#invite-object-target-user-types
-    pub(crate) target_user_type: Option<u8>,
+    pub target_user_type: Option<u8>,
     /// whether or not the invite is temporary (invited users will be kicked on disconnect unless they're assigned a role)
-    pub(crate) temporary: bool,
+    pub temporary: bool,
     /// how many times the invite has been used (always will be 0)
-    pub(crate) uses: u8,
+    pub uses: u8,
 }
 
 #[async_trait]
@@ -876,11 +876,11 @@ impl Update for InviteCreate {
 #[derive(Deserialize, Debug, Clone)]
 pub struct InviteDelete {
     /// the channel of the invite
-    pub(crate) channel_id: ChannelId,
+    pub channel_id: ChannelId,
     /// the guild of the invite
-    pub(crate) guild_id: Option<GuildId>,
+    pub guild_id: Option<GuildId>,
     /// the unique invite [code](https://discord.com/developers/docs/resources/invite#invite-object)
-    pub(crate) code: String,
+    pub code: String,
 }
 
 #[async_trait]
@@ -1462,9 +1462,9 @@ impl Update for InteractionCreate {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApplicationCommandCreate {
-    guild_id: GuildId,
+    pub guild_id: GuildId,
     #[serde(flatten)]
-    command: ApplicationCommand,
+    pub command: ApplicationCommand,
 }
 
 #[async_trait]
@@ -1474,9 +1474,9 @@ impl Update for ApplicationCommandCreate {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApplicationCommandUpdate {
-    guild_id: GuildId,
+    pub guild_id: GuildId,
     #[serde(flatten)]
-    command: ApplicationCommand,
+    pub command: ApplicationCommand,
 }
 
 #[async_trait]
@@ -1486,9 +1486,9 @@ impl Update for ApplicationCommandUpdate {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApplicationCommandDelete {
-    guild_id: GuildId,
+    pub guild_id: GuildId,
     #[serde(flatten)]
-    command: ApplicationCommand,
+    pub command: ApplicationCommand,
 }
 
 #[async_trait]
@@ -1498,11 +1498,11 @@ impl Update for ApplicationCommandDelete {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApplicationCommandPermissionsUpdate {
-    application_id: ApplicationId,
-    guild_id: GuildId,
-    id: CommandId,
+    pub application_id: ApplicationId,
+    pub guild_id: GuildId,
+    pub id: CommandId,
     // todo it could also be GuildPermissions :)
-    permissions: Vec<CommandPermissions>,
+    pub permissions: Vec<CommandPermissions>,
 }
 
 #[async_trait]

@@ -265,7 +265,7 @@ impl<C: SlashCommandRaw> SlashCommandExt for C {}
 
 /// Not url buttons
 #[async_trait]
-pub trait ButtonCommand: Send + Sync + DynClone {
+pub trait ButtonCommand: Send + Sync + DynClone + Downcast {
     type Bot: Send + Sync;
 
     fn style(&self) -> ButtonStyle {
@@ -285,6 +285,7 @@ pub trait ButtonCommand: Send + Sync + DynClone {
     ) -> Result<InteractionUse<ButtonPressData, Used>, BotError>;
 }
 
+impl_downcast!(ButtonCommand assoc Bot);
 impl<'clone, B> Clone for Box<dyn ButtonCommand<Bot=B> + 'clone> {
     fn clone(&self) -> Self {
         dyn_clone::clone_box(&**self)
@@ -292,7 +293,7 @@ impl<'clone, B> Clone for Box<dyn ButtonCommand<Bot=B> + 'clone> {
 }
 
 #[async_trait]
-pub trait MenuCommandRaw: Send + Sync + DynClone {
+pub trait MenuCommandRaw: Send + Sync + DynClone + Downcast {
     type Bot: Send + Sync;
 
     fn options(&self) -> Vec<SelectOption>;
@@ -313,6 +314,7 @@ pub trait MenuCommandRaw: Send + Sync + DynClone {
     ) -> Result<InteractionUse<MenuSelectData, Used>, BotError>;
 }
 
+impl_downcast!(MenuCommandRaw assoc Bot);
 impl<'clone, B> Clone for Box<dyn MenuCommandRaw<Bot=B> + 'clone> {
     fn clone(&self) -> Self {
         dyn_clone::clone_box(&**self)
@@ -320,7 +322,7 @@ impl<'clone, B> Clone for Box<dyn MenuCommandRaw<Bot=B> + 'clone> {
 }
 
 #[async_trait]
-pub trait MenuCommand: Send + Sync + DynClone {
+pub trait MenuCommand: Send + Sync + DynClone + Downcast {
     type Bot: Send + Sync;
 
     type Data: MenuData + Send;
@@ -345,11 +347,12 @@ pub trait MenuCommand: Send + Sync + DynClone {
     ) -> Result<InteractionUse<MenuSelectData<Self::Data>, Used>, BotError>;
 }
 
-impl<'clone, B, D> Clone for Box<dyn MenuCommand<Bot=B, Data=D> + 'clone> {
-    fn clone(&self) -> Self {
-        dyn_clone::clone_box(&**self)
-    }
-}
+// impl_downcast!(MenuCommand assoc Bot);
+// impl<'clone, B, D> Clone for Box<dyn MenuCommand<Bot=B, Data=D> + 'clone> {
+//     fn clone(&self) -> Self {
+//         dyn_clone::clone_box(&**self)
+//     }
+// }
 
 #[async_trait]
 impl<M: MenuCommand> MenuCommandRaw for M {
@@ -357,6 +360,18 @@ impl<M: MenuCommand> MenuCommandRaw for M {
 
     fn options(&self) -> Vec<SelectOption> {
         M::Data::options()
+    }
+
+    fn placeholder(&self) -> Option<String> {
+        M::placeholder(self)
+    }
+
+    fn num_values(&self) -> (Option<u8>, Option<u8>) {
+        M::num_values(self)
+    }
+
+    fn disabled(&self) -> bool {
+        M::disabled(self)
     }
 
     async fn run(&self,

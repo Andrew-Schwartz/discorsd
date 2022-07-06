@@ -2,7 +2,7 @@
 name = "discorsd"
 version = "0.1.0"
 authors = ["Andrew-Schwartz <andrewschwartz59@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 command_data_derive = { path = "../command_data_derive" }

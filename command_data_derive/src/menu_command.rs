@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::*;
+// use proc_macro_error::*;
 use quote::{quote, quote_spanned};
 use syn::{DataEnum, Ident};
 use syn::spanned::Spanned;
@@ -36,7 +36,7 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
 
     let tokens = quote! {
         impl ::discorsd::commands::MenuData for #ty {
-            fn options() -> Vec<SelectOption> {
+            fn options() -> Vec<::discorsd::model::components::SelectOption> {
                 vec![
                     #(#options),*
                 ]

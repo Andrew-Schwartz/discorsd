@@ -23,6 +23,7 @@ pub mod message;
 pub mod interaction;
 pub mod commands;
 pub mod components;
+pub mod locales;
 
 /// Information returned from the `/gateway/bot` endpoint, as in
 /// [gateway](crate::http::DiscordClient::gateway).
@@ -31,7 +32,7 @@ pub struct BotGateway {
     /// The WSS URL that can be used for connecting to the gateway
     pub url: String,
     /// The recommended number of shards to use when connecting
-    shards: u64,
+    pub shards: u64,
     // /// Information on the current session start limit
     // session_start_limit: session_start_limit,
 }

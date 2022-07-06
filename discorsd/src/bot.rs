@@ -64,12 +64,27 @@ pub struct BotState<B: Send + Sync + 'static> {
     pub global_command_names: OnceCell<HashMap<&'static str, CommandId>>,
     /// The [`ReactionCommand`](ReactionCommand)s your bot is using.
     pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
-    buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
-    menus: std::sync::RwLock<HashMap<ComponentId, Box<dyn MenuCommandRaw<Bot=B>>>>,
-    count: AtomicUsize,
+    pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
+    pub menus: std::sync::RwLock<HashMap<ComponentId, Box<dyn MenuCommandRaw<Bot=B>>>>,
+    pub count: AtomicUsize,
 }
 
 impl<B: Send + Sync + 'static> BotState<B> {
+    pub(crate) fn make_button(&self, button: Box<dyn ButtonCommand<Bot=B>>) -> Button {
+        let count = self.count.fetch_add(1, Ordering::Relaxed);
+        let id: ComponentId = count.to_string().into();
+        let component = Button {
+            style: button.style(),
+            label: Some(button.label()),
+            emoji: button.emoji(),
+            custom_id: Some(id.clone()),
+            url: None,
+            disabled: false,
+        };
+        self.buttons.write().unwrap().insert(id, button);
+        component
+    }
+
     pub(crate) fn make_menu(&self, menu: Box<dyn MenuCommandRaw<Bot=B>>) -> SelectMenu {
         let count = self.count.fetch_add(1, Ordering::Relaxed);
         let id: ComponentId = count.to_string().into();
@@ -86,20 +101,17 @@ impl<B: Send + Sync + 'static> BotState<B> {
         component
     }
 
-    pub(crate) fn make_button(&self, button: Box<dyn ButtonCommand<Bot=B>>) -> Button {
-        let count = self.count.fetch_add(1, Ordering::Relaxed);
-        let id: ComponentId = count.to_string().into();
-        let component = Button {
-            style: button.style(),
-            label: Some(button.label()),
-            emoji: button.emoji(),
-            custom_id: Some(id.clone()),
-            url: None,
-            disabled: false,
-        };
-        self.buttons.write().unwrap().insert(id, button);
-        component
-    }
+    // pub fn button<Btn: ButtonCommand<Bot=B>>(&self, id: &ComponentId) -> Option<&mut Btn> {
+    //     self.buttons.write().unwrap()
+    //         .get_mut(id)
+    //         .and_then(|btn| btn.downcast_mut::<Btn>())
+    // }
+    //
+    // pub fn menu<M: MenuCommand<Bot=B>>(&self, id: &ComponentId) -> Option<&mut M> {
+    //     self.menus.write().unwrap()
+    //         .get_mut(id)
+    //         .and_then(|menu| menu.downcast_mut::<M>())
+    // }
 }
 
 impl<B: Send + Sync> AsRef<Self> for BotState<B> {
@@ -418,7 +430,7 @@ pub trait BotExt: Bot + 'static {
                             command.run(Arc::clone(&state), interaction).await?;
                         }
                     }
-                    bad => todo!(),
+                    _bad => todo!(),
                 }
             }
             InteractionData::MessageCommand { .. } => todo!(),

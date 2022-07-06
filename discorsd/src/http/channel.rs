@@ -27,6 +27,8 @@ use crate::model::ids::*;
 use crate::model::message::*;
 use crate::model::permissions::Permissions;
 use crate::model::user::User;
+use crate::model::components::ActionRow;
+use crate::commands::{ButtonCommand, MenuCommand};
 
 /// Channel related http requests
 impl DiscordClient {
@@ -540,7 +542,7 @@ impl<S: ToString> From<(S, AttachmentSource)> for MessageAttachment {
 ///
 /// This type also uses the builder pattern for field by field configuration and construction, if
 /// desired. This starts with either [`create_message`] or [`CreateMessage::build`].
-#[derive(Serialize, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
 pub struct CreateMessage {
     /// the message contents (up to 2000 characters)
     pub content: Cow<'static, str>,
@@ -560,6 +562,10 @@ pub struct CreateMessage {
     /// include to make your message a reply
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_reference: Option<MessageReference>,
+    // todo other new stuff
+    /// sent if the message contains components like buttons, action rows, or other interactive components
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<ActionRow>,
 }
 
 impl<S: Into<Cow<'static, str>>> From<S> for CreateMessage {
@@ -598,6 +604,7 @@ impl From<Message> for CreateMessage {
             // todo
             allowed_mentions: None,
             message_reference: message.message_reference,
+            components: vec![],
         }
     }
 }
@@ -672,6 +679,32 @@ impl CreateMessage {
     /// Send this message a a reply to another message.
     pub fn reply(&mut self, message: MessageId) {
         self.message_reference = Some(MessageReference::reply(message));
+    }
+
+    pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
+        where B: Send + Sync + 'static,
+              Btn: ButtonCommand<Bot=B> + 'static,
+    {
+        self.buttons(state, [Box::new(button) as _])
+    }
+
+    pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
+        where B: Send + Sync + 'static,
+              I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
+    {
+        let mut component_buttons = Vec::new();
+        for button in buttons {
+            component_buttons.push(state.make_button(button));
+        }
+        self.components.push(ActionRow::buttons(component_buttons));
+    }
+
+    pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
+        where B: Send + Sync + 'static,
+              M: MenuCommand<Bot=B> + 'static,
+    {
+        let menu = state.make_menu(Box::new(menu));
+        self.components.push(ActionRow::select_menu(menu))
     }
 }
 

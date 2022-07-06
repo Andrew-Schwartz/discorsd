@@ -242,7 +242,6 @@ bitflags! {
         const SUPPRESS_PREMIUM_SUBSCRIPTIONS = 1 << 1;
     }
 }
-#[allow(clippy::use_self)]
 serde_bitflag!(SystemChannelFlags: u8);
 
 #[derive(Deserialize, Serialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]

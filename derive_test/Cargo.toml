@@ -2,7 +2,7 @@
 name = "derive_test"
 version = "0.1.0"
 authors = ["Andrew-Schwartz <andrewschwartz59@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 discorsd = { path = "../discorsd" }

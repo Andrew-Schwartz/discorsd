@@ -4,7 +4,7 @@ use crate::serde_utils::BoolExt;
 use serde::de::Error;
 use std::convert::TryFrom;
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct ActionRow {
     #[serde(rename = "type")]
     kind: u8,
@@ -28,7 +28,7 @@ impl ActionRow {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(try_from = "RawComponent")]
 pub enum Component {
     Button(Button),
@@ -104,12 +104,12 @@ impl TryFrom<RawComponent> for Component {
                 max_values: raw.max_values,
                 disabled: raw.disabled.unwrap_or(false),
             })),
-            bad => todo!(),
+            _bad => todo!(),
         }
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Button {
     /// one of button styles
     pub style: ButtonStyle,
@@ -160,7 +160,7 @@ serde_repr! {
 \tpub $1: Option<$2>,
  */
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct SelectMenu {
     /// a developer-defined identifier for the button, max 100 characters
     pub custom_id: ComponentId,

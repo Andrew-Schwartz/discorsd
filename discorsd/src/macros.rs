@@ -6,7 +6,7 @@ macro_rules! cdn {
 }
 
 macro_rules! api {
-    (VERSION) => { 8 };
+    (VERSION) => { 10 };
     (@priv str $fmt:literal) => {
         concat!("https://discord.com/api/v", api!(VERSION), $fmt)
     };
