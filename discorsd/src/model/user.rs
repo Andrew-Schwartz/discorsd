@@ -4,6 +4,7 @@ use crate::model::guild::Integration;
 use crate::model::ids::*;
 pub use crate::model::ids::UserId;
 use crate::model::ImageFormat;
+use crate::model::locales::Locale;
 
 /// Users in Discord are generally considered the base entity. Users can spawn across the entire
 /// platform, be members of guilds, participate in text and voice chat, and much more. Users are
@@ -31,38 +32,47 @@ pub struct User {
     /// whether the user belongs to an OAuth2 application
     ///
     /// Required OAuth2 scope: identify
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bot: Option<bool>,
     /// whether the user is an Official Discord System user (part of the urgent message system)
     ///
     /// Required OAuth2 scope: identify
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<bool>,
     /// whether the user has two factor enabled on their account
     ///
     /// Required OAuth2 scope: identify
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mfa_enabled: Option<bool>,
     /// the user's chosen language option
     ///
     /// Required OAuth2 scope: identify
-    pub locale: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locale: Option<Locale>,
     /// whether the email on this account has been verified
     ///
     /// Required OAuth2 scope: email
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub verified: Option<bool>,
     /// the user's email
     ///
     /// Required OAuth2 scope: email
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     /// the flags on a user's account
     ///
     /// Required OAuth2 scope: identify
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub flags: Option<UserFlags>,
     /// the type of Nitro subscription on a user's account
     ///
     /// Required OAuth2 scope: identify
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub premium_type: Option<PremiumType>,
     /// the public flags on a user's account
     ///
     /// Required OAuth2 scope: identify
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub public_flags: Option<UserFlags>,
 }
 

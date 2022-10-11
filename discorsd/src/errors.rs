@@ -144,7 +144,7 @@ impl CommandParseErrorInfo {
         }
     }
 
-    fn command_fail_message<B: Send + Sync>(&self, source: &str, command: Option<&dyn SlashCommandRaw<Bot=B>>) -> String {
+    fn command_fail_message<B: Send + Sync + 'static>(&self, source: &str, command: Option<&dyn SlashCommandRaw<Bot=B>>) -> String {
         if let Some(command) = command {
             format!(
                 "Failed to parse command `{}` ({}) in {}: {:?}",

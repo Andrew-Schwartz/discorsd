@@ -169,7 +169,11 @@ impl DiscordClient {
             if response.status().is_client_error() || response.status().is_server_error() {
                 let status = response.status();
                 let err = if status == StatusCode::TOO_MANY_REQUESTS {
-                    backoff::Error::Transient(ClientError::Http(status, route.clone()))
+                    backoff::Error::Transient {
+                        err: ClientError::Http(status, route.clone()),
+                        // use the default backoff policy
+                        retry_after: None,
+                    }
                 } else {
                     let permanent = if let Ok(error) = response.nice_json().await {
                         ClientError::Discord(error)
@@ -191,7 +195,7 @@ impl DiscordClient {
             async_operation,
             |e: ClientError, dur|
                 if !matches!(e, ClientError::Http(StatusCode::TOO_MANY_REQUESTS, Route::CreateReaction(_, _, _))) {
-                    warn!("Error in request after {:?}: {}", dur, e)
+                    warn!("Error in request {:?} after {:?}: {}", route, dur, e)
                 },
         ).await
     }

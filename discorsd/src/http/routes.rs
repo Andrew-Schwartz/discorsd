@@ -143,10 +143,17 @@ impl Route {
                 Some(Channel::Dm(dm)) => format!("DM: {}", dm.recipient.username),
                 Some(Channel::Voice(v)) => v.name,
                 Some(Channel::Category(c)) => c.name,
-                Some(Channel::News(n)) => n.name,
-                Some(Channel::Store(s)) => s.name,
+                Some(Channel::Announcement(n)) => n.name,
+                // Some(Channel::Store(s)) => s.name,
                 Some(Channel::GroupDm(_)) => unreachable!("bots can't be in group dms"),
                 None => channel.to_string(),
+                // todo
+                Some(Channel::AnnouncementThread(c)) => c.name,
+                Some(Channel::PublicThread(c)) => c.name,
+                Some(Channel::PrivateThread(c)) => c.name,
+                Some(Channel::GuildStageVoice(c)) => c.name,
+                Some(Channel::GuildDirectory(c)) => c.name,
+                Some(Channel::GuildForum(c)) => c.name,
             };
             format!("{}{}", guild, channel)
         };

@@ -106,6 +106,7 @@ impl DiscordClient {
         application: ApplicationId,
         commands: Vec<Command>,
     ) -> ClientResult<Vec<ApplicationCommand>> {
+        println!("commands = {:?}", commands);
         self.put(BulkOverwriteGlobalCommands(application), commands).await
     }
 

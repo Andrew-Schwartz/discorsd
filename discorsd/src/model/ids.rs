@@ -99,6 +99,7 @@ id_impl!(
     InteractionId,
     SkuId,
     TeamId,
+    TagId,
 );
 
 mod sealed {

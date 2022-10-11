@@ -21,7 +21,7 @@ use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;
 use crate::http::routes::Route::*;
 use crate::http::routes::Route;
-use crate::model::channel::{Channel, DmChannel, GroupDmChannel, NewsChannel, TextChannel};
+use crate::model::channel::{Channel, DmChannel, GroupDmChannel, AnnouncementChannel, TextChannel};
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
 use crate::model::message::*;
@@ -292,7 +292,7 @@ macro_rules! impl_message_channel_ext {
         impl MessageChannelExt for $types {}
     )* };
 }
-impl_message_channel_ext!(ChannelId, Channel, TextChannel, DmChannel, GroupDmChannel, NewsChannel);
+impl_message_channel_ext!(ChannelId, Channel, TextChannel, DmChannel, GroupDmChannel, AnnouncementChannel);
 
 impl ChannelMessageId {
     /// Edit this message

@@ -248,12 +248,19 @@ impl Update for ChannelCreate {
             Channel::Category(category) => {
                 cache.categories.write().await.insert(category.clone());
             }
-            Channel::News(news) => {
+            Channel::Announcement(news) => {
                 cache.news.write().await.insert(news.clone());
             }
-            Channel::Store(store) => {
-                cache.stores.write().await.insert(store.clone())
-            }
+            // Channel::Store(store) => {
+            //     cache.stores.write().await.insert(store.clone())
+            // }
+            // todo
+            Channel::AnnouncementThread(_) => {}
+            Channel::PublicThread(_) => {}
+            Channel::PrivateThread(_) => {}
+            Channel::GuildStageVoice(_) => {}
+            Channel::GuildDirectory(_) => {}
+            Channel::GuildForum(_) => {}
         };
     }
 }
@@ -298,16 +305,23 @@ impl Update for ChannelUpdate {
                     *category = channel.clone();
                 }
             }
-            Channel::News(channel) => {
+            Channel::Announcement(channel) => {
                 if let Some(news) = cache.news.write().await.get_mut(&channel) {
                     *news = channel.clone();
                 }
             }
-            Channel::Store(channel) => {
-                if let Some(store) = cache.stores.write().await.get_mut(&channel) {
-                    *store = channel.clone();
-                }
-            }
+            // Channel::Store(channel) => {
+            //     if let Some(store) = cache.stores.write().await.get_mut(&channel) {
+            //         *store = channel.clone();
+            //     }
+            // }
+            // todo
+            Channel::AnnouncementThread(_) => {}
+            Channel::PublicThread(_) => {}
+            Channel::PrivateThread(_) => {}
+            Channel::GuildStageVoice(_) => {}
+            Channel::GuildDirectory(_) => {}
+            Channel::GuildForum(_) => {}
         };
     }
 }
@@ -331,9 +345,16 @@ impl Update for ChannelDelete {
                 by_channel.remove(dm);
             }
             Channel::Category(cat) => { cache.categories.write().await.remove(cat); },
-            Channel::News(news) => { cache.news.write().await.remove(news); },
-            Channel::Store(store) => { cache.stores.write().await.remove(store); },
+            Channel::Announcement(news) => { cache.news.write().await.remove(news); },
+            // Channel::Store(store) => { cache.stores.write().await.remove(store); },
             Channel::Voice(_) | Channel::GroupDm(_) => {}
+            // todo
+            Channel::AnnouncementThread(_) => {}
+            Channel::PublicThread(_) => {}
+            Channel::PrivateThread(_) => {}
+            Channel::GuildStageVoice(_) => {}
+            Channel::GuildDirectory(_) => {}
+            Channel::GuildForum(_) => {}
         };
     }
 }
@@ -367,14 +388,21 @@ impl Update for ChannelPinsUpdate {
                         channel.last_pin_timestamp = last_pin_timestamp;
                     });
             }
-            Some(GuildNews) => {
+            Some(GuildAnnouncement) => {
                 cache.news.write().await.entry(&channel_id)
                     .and_modify(|channel| {
                         channel.last_pin_timestamp = last_pin_timestamp;
                     });
             }
-            Some(GuildVoice) | Some(GuildStore) | Some(GuildCategory) => {}
+            Some(GuildVoice) | Some(GuildCategory) => {}
             Some(GroupDm) | None => {}
+            // todo
+            Some(AnnouncementThread) => {}
+            Some(PublicThread) => {}
+            Some(PrivateThread) => {}
+            Some(GuildStageVoice) => {}
+            Some(GuildDirectory) => {}
+            Some(GuildForum) => {}
         }
         if let Some(guild_id) = guild_id {
             cache.guilds.write().await.entry(guild_id)
@@ -382,11 +410,18 @@ impl Update for ChannelPinsUpdate {
                     guild.channels.entry(&channel_id)
                         .and_modify(|channel| match channel {
                             Channel::Text(channel) => channel.last_pin_timestamp = last_pin_timestamp,
-                            Channel::News(channel) => channel.last_pin_timestamp = last_pin_timestamp,
+                            Channel::Announcement(channel) => channel.last_pin_timestamp = last_pin_timestamp,
                             // no last timestamp
-                            Channel::Voice(_) | Channel::Store(_) | Channel::Category(_) => {}
+                            Channel::Voice(_)  | Channel::Category(_) => {}
                             // not in a guild
                             Channel::Dm(_) | Channel::GroupDm(_) => {}
+                            // todo
+                            Channel::AnnouncementThread(_) => {}
+                            Channel::PublicThread(_) => {}
+                            Channel::PrivateThread(_) => {}
+                            Channel::GuildStageVoice(_) => {}
+                            Channel::GuildDirectory(_) => {}
+                            Channel::GuildForum(_) => {}
                         });
                 });
         }
@@ -411,7 +446,7 @@ pub struct GuildCreate {
 #[async_trait]
 impl Update for GuildCreate {
     async fn update(&self, cache: &Cache) {
-        let (mut t, mut c, mut n, mut s) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut t, mut c, mut n) = (Vec::new(), Vec::new(), Vec::new());
         {
             let mut guard = cache.channel_types.write().await;
             self.guild.channels.iter()
@@ -420,21 +455,28 @@ impl Update for GuildCreate {
                     match channel {
                         Channel::Text(text) => t.push(text.clone()),
                         Channel::Category(category) => c.push(category.clone()),
-                        Channel::News(news) => n.push(news.clone()),
-                        Channel::Store(store) => s.push(store.clone()),
+                        Channel::Announcement(news) => n.push(news.clone()),
+                        // Channel::Store(store) => s.push(store.clone()),
                         Channel::Voice(_) => {
                             // not (yet/ever) implemented
                         }
                         Channel::Dm(_) | Channel::GroupDm(_) => {
                             // not part of a guild
                         }
+                        // todo
+                        Channel::AnnouncementThread(_) => {}
+                        Channel::PublicThread(_) => {}
+                        Channel::PrivateThread(_) => {}
+                        Channel::GuildStageVoice(_) => {}
+                        Channel::GuildDirectory(_) => {}
+                        Channel::GuildForum(_) => {}
                     }
                 });
         }
         cache.channels.write().await.extend(t);
         cache.categories.write().await.extend(c);
         cache.news.write().await.extend(n);
-        cache.stores.write().await.extend(s);
+        // cache.stores.write().await.extend(s);
 
         let mut members = cache.members.write().await;
         for member in self.guild.members.iter().cloned() {
@@ -914,16 +956,22 @@ impl Update for MessageCreate {
                     dm.last_message_id = Some(self.message.id);
                 }
             }
-            Some(ChannelType::GuildNews) => {
+            Some(ChannelType::GuildAnnouncement) => {
                 if let Some(news) = cache.news.write().await.get_mut(&self.message.channel) {
                     news.last_message_id = Some(self.message.id);
                 }
             }
-            Some(ChannelType::GuildStore)
-            | Some(ChannelType::GuildVoice)
+            Some(ChannelType::GuildVoice)
             | Some(ChannelType::GroupDm)
             | Some(ChannelType::GuildCategory)
             | None => {}
+            // todo
+            Some(ChannelType::AnnouncementThread) => {}
+            Some(ChannelType::PublicThread) => {}
+            Some(ChannelType::PrivateThread) => {}
+            Some(ChannelType::GuildStageVoice) => {}
+            Some(ChannelType::GuildDirectory) => {}
+            Some(ChannelType::GuildForum) => {}
         }
         cache.users.write().await.insert(self.message.author.clone());
         cache.messages.write().await.insert(self.message.clone());
@@ -1086,7 +1134,7 @@ impl Update for MessageDelete {
                     channel.last_message_id = channel.last_message_id.filter(|&id| id != self.id);
                 }
             }
-            Some(GuildNews) => {
+            Some(GuildAnnouncement) => {
                 if let Some(channel) = cache.news.write().await.get_mut(self.channel_id) {
                     channel.last_message_id = channel.last_message_id.filter(|&id| id != self.id);
                 }
@@ -1102,7 +1150,7 @@ impl Update for MessageDelete {
                     Some(Channel::Dm(dm)) => {
                         dm.last_message_id = dm.last_message_id.filter(|&id| id != self.id);
                     }
-                    Some(Channel::News(news)) => {
+                    Some(Channel::Announcement(news)) => {
                         news.last_message_id = news.last_message_id.filter(|&id| id != self.id);
                     }
                     Some(_) | None => {}

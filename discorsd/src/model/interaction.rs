@@ -10,8 +10,9 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::SerializeSeq;
 
+use crate::BotState;
 use crate::cache::IdMap;
-use crate::commands::{MenuCommand, ButtonCommand};
+use crate::commands::{ButtonCommand, MenuCommand};
 use crate::errors::{CommandOptionTypeParsed, OptionType};
 use crate::http::channel::{embed, RichEmbed};
 use crate::model::channel::ChannelType;
@@ -19,12 +20,11 @@ use crate::model::components::{ActionRow, ComponentId};
 use crate::model::guild::GuildMember;
 use crate::model::ids::*;
 use crate::model::ids::{CommandId, InteractionId};
-use crate::model::message::{AllowedMentions, MessageFlags};
+use crate::model::locales::Locale;
+use crate::model::message::{AllowedMentions, Attachment, MessageFlags};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::serde_utils::{self, BoolExt};
-use crate::BotState;
-use crate::model::locales::Locale;
 
 mod validate {
     use once_cell::sync::Lazy;
@@ -57,11 +57,13 @@ mod validate {
 #[derive(Serialize, Debug, Clone)]
 pub struct Command {
     pub name: &'static str,
+    pub name_localizations: HashMap<Locale, &'static str>,
     pub description: Cow<'static, str>,
+    pub description_localizations: HashMap<Locale, String>,
     pub options: TopLevelOption,
     #[serde(skip_serializing_if = "BoolExt::is_true")]
     pub default_permission: bool,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing)]
     pub kind: ApplicationCommandType,
 }
 
@@ -81,7 +83,15 @@ impl Command {
             "Maximum of 4000 bytes for combined name, description, and value properties for \
             each command and its subcommands and groups"
         );
-        Self { name, description, options, default_permission, kind: ApplicationCommandType::ChatInput }
+        Self {
+            name,
+            name_localizations: Default::default(),
+            description,
+            description_localizations: Default::default(),
+            options,
+            default_permission,
+            kind: ApplicationCommandType::ChatInput,
+        }
     }
 }
 
@@ -157,11 +167,6 @@ impl TopLevelOption {
 
     fn validate_options(options: &[DataOption]) {
         assert!(
-            options.iter()
-                .filter(|o| o.default()).count() <= 1,
-            "only one option can be default"
-        );
-        assert!(
             !options.iter()
                 .skip_while(|o| o.required())
                 .any(DataOption::required),
@@ -212,7 +217,6 @@ impl Serialize for SubCommand {
             kind: ApplicationCommandOptionType::SubCommand,
             name: self.name.clone(),
             description: self.description.clone(),
-            default: false,
             required: false,
             choices: vec![],
             options: Some(&self.options),
@@ -236,7 +240,6 @@ impl Serialize for SubCommandGroup {
             kind: ApplicationCommandOptionType::SubCommandGroup,
             name: self.name.clone(),
             description: self.description.clone(),
-            default: false,
             required: false,
             choices: vec![],
             options: Some(&self.sub_commands),
@@ -252,6 +255,9 @@ pub enum DataOption {
     User(CommandDataOption<UserId>),
     Channel(CommandDataOption<ChannelId>),
     Role(CommandDataOption<RoleId>),
+    Mentionable(CommandDataOption<MentionableId>),
+    Number(CommandDataOption<f64>),
+    Attachment(CommandDataOption<Attachment>),
 }
 
 impl Serialize for DataOption {
@@ -264,6 +270,9 @@ impl Serialize for DataOption {
             Self::User(opt) => opt.serializable(User),
             Self::Channel(opt) => opt.serializable(Channel),
             Self::Role(opt) => opt.serializable(Role),
+            Self::Mentionable(opt) => opt.serializable(Mentionable),
+            Self::Number(opt) => opt.serializable(Number),
+            Self::Attachment(opt) => opt.serializable(Attachment),
         }.serialize(s)
     }
 }
@@ -277,6 +286,9 @@ impl DataOption {
             Self::User(o) => o.name.as_ref(),
             Self::Channel(o) => o.name.as_ref(),
             Self::Role(o) => o.name.as_ref(),
+            Self::Mentionable(o) => o.name.as_ref(),
+            Self::Number(o) => o.name.as_ref(),
+            Self::Attachment(o) => o.name.as_ref(),
         }
     }
     pub fn description(&self) -> &str {
@@ -287,16 +299,9 @@ impl DataOption {
             Self::User(o) => o.description.as_ref(),
             Self::Channel(o) => o.description.as_ref(),
             Self::Role(o) => o.description.as_ref(),
-        }
-    }
-    pub fn default(&self) -> bool {
-        match self {
-            Self::String(o) => o.default,
-            Self::Integer(o) => o.default,
-            Self::Boolean(o) => o.default,
-            Self::User(o) => o.default,
-            Self::Channel(o) => o.default,
-            Self::Role(o) => o.default,
+            Self::Mentionable(o) => o.description.as_ref(),
+            Self::Number(o) => o.description.as_ref(),
+            Self::Attachment(o) => o.description.as_ref(),
         }
     }
     pub fn required(&self) -> bool {
@@ -307,32 +312,57 @@ impl DataOption {
             Self::User(o) => o.required,
             Self::Channel(o) => o.required,
             Self::Role(o) => o.required,
+            Self::Mentionable(o) => o.required,
+            Self::Number(o) => o.required,
+            Self::Attachment(o) => o.required,
         }
     }
     pub(crate) fn num_choices(&self) -> usize {
         match self {
             Self::String(cdo) => cdo.choices.len(),
             Self::Integer(cdo) => cdo.choices.len(),
+            Self::Number(cdo) => cdo.choices.len(),
             Self::Boolean(_)
             | Self::User(_)
             | Self::Channel(_)
-            | Self::Role(_) => 0,
+            | Self::Role(_)
+            | Self::Mentionable(_)
+            | Self::Attachment(_) => 0,
         }
     }
 }
+
+// trait DataOptionSpecifications {
+//     type Specifications;
+// }
+//
+// impl DataOption
 
 #[derive(Debug, Clone)]
 pub struct CommandDataOption<T> {
     /// 1-32 character name
     name: Cow<'static, str>,
+    /// Localization dictionary for the name field. Values follow the same restrictions as name
+    name_localizations: HashMap<Locale, Cow<'static, str>>,
     /// 1-100 character description
     description: Cow<'static, str>,
-    /// the first required option for the user to complete--only one option can be default
-    default: bool,
+    /// Localization dictionary for the description field. Values follow the same restrictions as description
+    description_localizations: HashMap<Locale, Cow<'static, str>>,
     /// if the parameter is required or optional--default false
     required: bool,
     /// choices for string and int types for the user to pick from
     choices: Vec<CommandChoice<T>>,
+    // todo channel types?
+    /// If the option is an INTEGER or NUMBER type, the minimum value permitted
+    min_value: Option<T>,
+    /// If the option is an INTEGER or NUMBER type, the maximum value permitted
+    max_value: Option<T>,
+    /// For option type STRING, the minimum allowed length (minimum of 0, maximum of 6000)
+    min_length: Option<usize>,
+    /// For option type STRING, the maximum allowed length (minimum of 1, maximum of 6000)
+    max_length: Option<usize>,
+    /// If autocomplete interactions are enabled for this STRING, INTEGER, or NUMBER type option
+    autocomplete: bool,
 }
 
 impl<T> CommandDataOption<T> {
@@ -344,20 +374,28 @@ impl<T> CommandDataOption<T> {
 
         Self {
             name,
+            name_localizations: Default::default(),
             description,
-            default: false,
+            description_localizations: Default::default(),
             required: false,
             choices: [].into(),
+            min_value: None,
+            max_value: None,
+            min_length: None,
+            max_length: None,
+            autocomplete: false,
         }
-    }
-
-    pub fn default(mut self) -> Self {
-        self.default = true;
-        self
     }
 
     pub fn required(mut self) -> Self {
         self.required = true;
+        self
+    }
+
+    pub fn autocomplete(mut self) -> Self {
+        self.autocomplete = true;
+        // todo is this how this should be handled
+        assert!(self.choices.is_empty(), "Can't set choices and autocomplete");
         self
     }
 }
@@ -371,6 +409,16 @@ impl CommandDataOption<&'static str> {
         self.choices = choices;
         self
     }
+
+    pub fn min_length(mut self, length: usize) -> Self {
+        self.min_length = Some(length);
+        self
+    }
+
+    pub fn max_length(mut self, length: usize) -> Self {
+        self.max_length = Some(length);
+        self
+    }
 }
 
 impl CommandDataOption<i64> {
@@ -382,25 +430,56 @@ impl CommandDataOption<i64> {
         self.choices = choices;
         self
     }
+
+    pub fn min_value(mut self, min: i64) -> Self {
+        self.min_value = Some(min);
+        self
+    }
+
+    pub fn max_value(mut self, max: i64) -> Self {
+        self.max_value = Some(max);
+        self
+    }
+}
+
+impl CommandDataOption<f64> {
+    pub fn new_num<N: Into<Cow<'static, str>>, D: Into<Cow<'static, str>>>(name: N, description: D) -> Self {
+        Self::new(name, description)
+    }
+
+    pub fn choices(mut self, choices: Vec<CommandChoice<f64>>) -> Self {
+        self.choices = choices;
+        self
+    }
+
+    pub fn min_value(mut self, min: f64) -> Self {
+        self.min_value = Some(min);
+        self
+    }
+
+    pub fn max_value(mut self, max: f64) -> Self {
+        self.max_value = Some(max);
+        self
+    }
 }
 
 impl<T> CommandDataOption<T>
     where ApplicationCommandOptionChoice: From<CommandChoice<T>>,
-          CommandChoice<T>: Copy,
+          CommandChoice<T>: Clone,
 {
     fn serializable(&self, kind: ApplicationCommandOptionType) -> SerializeOption<DataOption> {
         // have to convert `CommandChoice<T>` to `ApplicationCommandOptionChoice` to get rid of the
         // generic type. todo is there a better way to do this? (could make choices: Option<String>?)
         let choices = self.choices
             .iter()
-            .copied()
+            // todo this used to copy them, figure out how to make it efficient again?
+            .cloned()
             .map(ApplicationCommandOptionChoice::from)
             .collect();
         SerializeOption {
             kind,
             name: Cow::clone(&self.name),
             description: Cow::clone(&self.description),
-            default: self.default,
             required: self.required,
             choices,
             options: None,
@@ -408,10 +487,12 @@ impl<T> CommandDataOption<T>
     }
 }
 
-#[derive(Serialize, Debug, Clone, Copy)]
+#[derive(Serialize, Debug, Clone)]
 pub struct CommandChoice<T> {
     /// 1-100 character choice name
     pub name: &'static str,
+    /// Localization dictionary for the name field. Values follow the same restrictions as name
+    pub name_localizations: HashMap<Locale, &'static str>,
     /// value of the choice
     pub value: T,
     #[serde(skip)]
@@ -427,7 +508,7 @@ impl<T> CommandChoice<T> {
             name
         );
 
-        Self { name, value, _priv: () }
+        Self { name, name_localizations: Default::default(), value, _priv: () }
     }
 }
 
@@ -477,14 +558,33 @@ impl From<CommandChoice<RoleId>> for ApplicationCommandOptionChoice {
     }
 }
 
+impl From<CommandChoice<MentionableId>> for ApplicationCommandOptionChoice {
+    fn from(choice: CommandChoice<MentionableId>) -> Self {
+        let name = choice.name.to_string();
+        Self { value: OptionValue::String(name.clone()), name }
+    }
+}
+
+impl From<CommandChoice<f64>> for ApplicationCommandOptionChoice {
+    fn from(choice: CommandChoice<f64>) -> Self {
+        Self { value: OptionValue::Number(choice.value), name: choice.name.to_string() }
+    }
+}
+
+impl From<CommandChoice<Attachment>> for ApplicationCommandOptionChoice {
+    fn from(_choice: CommandChoice<Attachment>) -> Self {
+        // Self { value: OptionValue::Number(choice.value), name: choice.name.to_string() }
+        todo!()
+    }
+}
+
+
 #[derive(Serialize)]
 struct SerializeOption<'a, O: Debug> {
     #[serde(rename = "type")]
     pub kind: ApplicationCommandOptionType,
     pub name: Cow<'static, str>,
     pub description: Cow<'static, str>,
-    #[serde(skip_serializing_if = "crate::serde_utils::BoolExt::is_false")]
-    pub default: bool,
     #[serde(skip_serializing_if = "crate::serde_utils::BoolExt::is_false")]
     pub required: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -838,6 +938,9 @@ mod tests {
                         DataOption::User(opt) => assert!(matches!(&opt.name, Cow::Borrowed(_))),
                         DataOption::Channel(opt) => assert!(matches!(&opt.name, Cow::Borrowed(_))),
                         DataOption::Role(opt) => assert!(matches!(&opt.name, Cow::Borrowed(_))),
+                        DataOption::Mentionable(opt) => assert!(matches!(&opt.name, Cow::Borrowed(_))),
+                        DataOption::Number(opt) => assert!(matches!(&opt.name, Cow::Borrowed(_))),
+                        DataOption::Attachment(opt) => assert!(matches!(&opt.name, Cow::Borrowed(_))),
                     }
                 });
         } else {
@@ -885,10 +988,6 @@ pub struct ApplicationCommand {
     /// commands. By default, commands are visible.
     #[serde(default = "serde_utils::default_true")]
     pub dm_permission: bool,
-    /// whether the command is enabled by default when the app is added to a guild
-    #[deprecated]
-    #[serde(default = "serde_utils::default_true")]
-    pub default_permissions: bool,
 }
 id_impl!(ApplicationCommand => id: CommandId);
 
@@ -965,11 +1064,12 @@ pub struct ApplicationCommandOptionChoice {
     pub value: OptionValue,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum OptionValue {
     String(String),
     Integer(i64),
+    Number(f64),
     Bool(bool),
 }
 
@@ -1048,7 +1148,7 @@ pub struct GuildCommandPermissions {
 #[derive(Debug, Clone, Copy)]
 pub struct CommandPermissions {
     /// the id of the role or user
-    pub id: UserRoleId,
+    pub id: MentionableId,
     /// true to allow, false to disallow
     pub permission: bool,
 }
@@ -1056,28 +1156,28 @@ pub struct CommandPermissions {
 impl CommandPermissions {
     pub fn allow_role(role: RoleId) -> Self {
         Self {
-            id: UserRoleId::Role(role),
+            id: MentionableId::Role(role),
             permission: true,
         }
     }
 
     pub fn disallow_role(role: RoleId) -> Self {
         Self {
-            id: UserRoleId::Role(role),
+            id: MentionableId::Role(role),
             permission: false,
         }
     }
 
     pub fn allow_user(user: UserId) -> Self {
         Self {
-            id: UserRoleId::User(user),
+            id: MentionableId::User(user),
             permission: true,
         }
     }
 
     pub fn disallow_user(user: UserId) -> Self {
         Self {
-            id: UserRoleId::User(user),
+            id: MentionableId::User(user),
             permission: false,
         }
     }
@@ -1085,18 +1185,18 @@ impl CommandPermissions {
 
 /// Either a `UserId` or a `RoleId`
 #[derive(Debug, Clone, Copy)]
-pub enum UserRoleId {
+pub enum MentionableId {
     Role(RoleId),
     User(UserId),
 }
 
-impl From<RoleId> for UserRoleId {
+impl From<RoleId> for MentionableId {
     fn from(role: RoleId) -> Self {
         Self::Role(role)
     }
 }
 
-impl From<UserId> for UserRoleId {
+impl From<UserId> for MentionableId {
     fn from(user: UserId) -> Self {
         Self::User(user)
     }
@@ -1120,8 +1220,8 @@ mod acp_impl {
         fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
             let Self { id, permission } = *self;
             let shim = match id {
-                UserRoleId::Role(role) => Shim { kind: 1, id: UserId(role.0), permission },
-                UserRoleId::User(id) => Shim { kind: 2, id, permission }
+                MentionableId::Role(role) => Shim { kind: 1, id: UserId(role.0), permission },
+                MentionableId::User(id) => Shim { kind: 2, id, permission }
             };
             shim.serialize(s)
         }
@@ -1134,11 +1234,11 @@ mod acp_impl {
                 // role
                 1 => {
                     let role = RoleId(id.0);
-                    Ok(Self { id: UserRoleId::Role(role), permission })
+                    Ok(Self { id: MentionableId::Role(role), permission })
                 }
                 // user
                 2 => {
-                    Ok(Self { id: UserRoleId::User(id), permission })
+                    Ok(Self { id: MentionableId::User(id), permission })
                 }
                 #[allow(clippy::cast_lossless)]
                 bad => Err(D::Error::invalid_value(Unexpected::Unsigned(bad as _), &"1 (role) or 2 (user)")),
@@ -1246,7 +1346,7 @@ pub enum InteractionData {
 }
 
 // todo rename
-#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(try_from = "ApplicationCommandInteractionData")]
 pub struct ApplicationCommandData {
     pub id: CommandId,
@@ -1269,25 +1369,25 @@ pub struct ComponentData {
 //
 // }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct GroupOption {
     pub name: String,
     pub lower: CommandOption,
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct CommandOption {
     pub name: String,
     pub lower: Vec<ValueOption>,
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct ValueOption {
     pub name: String,
     pub lower: OptionValue,
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub enum InteractionDataOption {
     Group(GroupOption),
     Command(CommandOption),
@@ -1295,7 +1395,7 @@ pub enum InteractionDataOption {
 }
 
 impl TryFrom<ApplicationCommandInteractionData> for ApplicationCommandData {
-    type Error = crate::serde_utils::Error;
+    type Error = serde_utils::Error;
 
     fn try_from(value: ApplicationCommandInteractionData) -> Result<Self, Self::Error> {
         use ApplicationCommandInteractionData as ACID;

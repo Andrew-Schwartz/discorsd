@@ -10,7 +10,7 @@ use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-use crate::model::channel::{CategoryChannel, Channel, ChannelType, DmChannel, NewsChannel, StoreChannel, TextChannel};
+use crate::model::channel::{CategoryChannel, Channel, ChannelType, DmChannel, AnnouncementChannel, TextChannel};
 use crate::model::guild::{Guild, GuildMember, UnavailableGuild};
 use crate::model::ids::*;
 use crate::model::interaction::ApplicationCommand;
@@ -36,8 +36,8 @@ pub struct Cache {
     // like this because of updates that just contain a channel id
     pub(crate) dms: RwLock<(HashMap<UserId, ChannelId>, IdMap<DmChannel>)>,
     pub(crate) categories: RwLock<IdMap<CategoryChannel>>,
-    pub(crate) news: RwLock<IdMap<NewsChannel>>,
-    pub(crate) stores: RwLock<IdMap<StoreChannel>>,
+    pub(crate) news: RwLock<IdMap<AnnouncementChannel>>,
+    // pub(crate) stores: RwLock<IdMap<StoreChannel>>,
 
     pub(crate) messages: RwLock<IdMap<Message>>,
     pub(crate) interaction_responses: RwLock<HashMap<InteractionId, Message>>,
@@ -88,9 +88,16 @@ impl Cache {
             Some(ChannelType::GuildText) => self.channels.read().await.get(&id).cloned().map(Channel::Text),
             Some(ChannelType::Dm) => self.dms.read().await.1.get(&id).cloned().map(Channel::Dm),
             Some(ChannelType::GuildCategory) => self.categories.read().await.get(&id).cloned().map(Channel::Category),
-            Some(ChannelType::GuildNews) => self.news.read().await.get(&id).cloned().map(Channel::News),
-            Some(ChannelType::GuildStore) => self.stores.read().await.get(&id).cloned().map(Channel::Store),
+            Some(ChannelType::GuildAnnouncement) => self.news.read().await.get(&id).cloned().map(Channel::Announcement),
+            // Some(ChannelType::GuildStore) => self.stores.read().await.get(&id).cloned().map(Channel::Store),
             Some(ChannelType::GroupDm) | Some(ChannelType::GuildVoice) | None => None,
+            // todo
+            Some(ChannelType::AnnouncementThread) => None,
+            Some(ChannelType::PublicThread) => None,
+            Some(ChannelType::PrivateThread) => None,
+            Some(ChannelType::GuildStageVoice) => None,
+            Some(ChannelType::GuildDirectory) => None,
+            Some(ChannelType::GuildForum) => None,
         }
     }
 
@@ -169,7 +176,7 @@ impl Cache {
             dms, channels,
             categories,
             news,
-            stores,
+            // stores,
             messages,
             interaction_responses,
             commands
@@ -187,7 +194,7 @@ impl Cache {
             dms: dms.read().await,
             categories: categories.read().await,
             news: news.read().await,
-            stores: stores.read().await,
+            // stores: stores.read().await,
             messages: messages.read().await,
             interaction_responses: interaction_responses.read().await,
             commands: commands.read().await,
@@ -209,8 +216,8 @@ pub struct DebugCache<'a> {
     channels: RwLockReadGuard<'a, IdMap<TextChannel>>,
     dms: RwLockReadGuard<'a, (HashMap<UserId, ChannelId>, IdMap<DmChannel>)>,
     categories: RwLockReadGuard<'a, IdMap<CategoryChannel>>,
-    news: RwLockReadGuard<'a, IdMap<NewsChannel>>,
-    stores: RwLockReadGuard<'a, IdMap<StoreChannel>>,
+    news: RwLockReadGuard<'a, IdMap<AnnouncementChannel>>,
+    // stores: RwLockReadGuard<'a, IdMap<StoreChannel>>,
     messages: RwLockReadGuard<'a, IdMap<Message>>,
     interaction_responses: RwLockReadGuard<'a, HashMap<InteractionId, Message>>,
     commands: RwLockReadGuard<'a, IdMap<ApplicationCommand>>,
