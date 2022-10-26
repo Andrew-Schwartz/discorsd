@@ -3,10 +3,18 @@ use std::fmt::{self, Display};
 
 use async_trait::async_trait;
 use reqwest::Response;
+use serde::{Deserialize, Deserializer};
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use serde_json::Error as JsonError;
 use serde_json::error::Category;
+
+pub fn null_as_t<'de, D, T>(d: D) -> Result<T, D::Error>
+    where D: Deserializer<'de>,
+          T: Default,
+          Option<T>: Deserialize<'de> {
+    Ok(<Option<T>>::deserialize(d)?
+        .unwrap_or_default())
+}
 
 ///
 #[derive(Debug)]

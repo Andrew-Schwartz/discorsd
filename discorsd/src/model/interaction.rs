@@ -24,7 +24,7 @@ use crate::model::locales::Locale;
 use crate::model::message::{AllowedMentions, Attachment, MessageFlags};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
-use crate::serde_utils::{self, BoolExt};
+use crate::serde_utils::{self, BoolExt, null_as_t};
 
 mod validate {
     use once_cell::sync::Lazy;
@@ -57,8 +57,10 @@ mod validate {
 #[derive(Serialize, Debug, Clone)]
 pub struct Command {
     pub name: &'static str,
+    #[serde(deserialize_with = "null_as_t", skip_serializing_if = "HashMap::is_empty")]
     pub name_localizations: HashMap<Locale, &'static str>,
     pub description: Cow<'static, str>,
+    #[serde(deserialize_with = "null_as_t", skip_serializing_if = "HashMap::is_empty")]
     pub description_localizations: HashMap<Locale, String>,
     pub options: TopLevelOption,
     #[serde(skip_serializing_if = "BoolExt::is_true")]
@@ -339,6 +341,7 @@ impl DataOption {
 // impl DataOption
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct CommandDataOption<T> {
     /// 1-32 character name
     name: Cow<'static, str>,
@@ -973,10 +976,12 @@ pub struct ApplicationCommand {
     /// Name of command
     pub name: String,
     /// Localization dictionary for name field. Values follow the same restrictions as name
+    #[serde(deserialize_with = "null_as_t", default, skip_serializing_if = "HashMap::is_empty")]
     pub name_localization: HashMap<Locale, String>,
     /// 1-100 character description
     pub description: String,
     /// Localization dictionary for description field. Values follow the same restrictions as description
+    #[serde(deserialize_with = "null_as_t", default, skip_serializing_if = "HashMap::is_empty")]
     pub description_localizations: HashMap<Locale, String>,
     // todo maybe enforce that?
     /// the parameters for the command. ONLY ALLOWED FOR CHAT COMMANDS
@@ -1138,8 +1143,8 @@ pub struct GuildApplicationCommandPermission {
 /// Partial [GuildApplicationCommandPermission](GuildApplicationCommandPermission)
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct GuildCommandPermissions {
-    /// the id of the command
-    pub id: CommandId,
+    // /// the id of the command
+    // pub id: CommandId,
     /// the permissions for the command in the guild
     pub permissions: Vec<CommandPermissions>,
 }
@@ -1147,7 +1152,9 @@ pub struct GuildCommandPermissions {
 /// Referred to in Discord docs as `ApplicationCommandPermissions`
 #[derive(Debug, Clone, Copy)]
 pub struct CommandPermissions {
-    /// the id of the role or user
+    // todo https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-application-command-permissions-structure
+    // todo https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-application-command-permissions-constants
+    /// the id of the role, user, or channel
     pub id: MentionableId,
     /// true to allow, false to disallow
     pub permission: bool,
@@ -1188,6 +1195,7 @@ impl CommandPermissions {
 pub enum MentionableId {
     Role(RoleId),
     User(UserId),
+    Channel(ChannelId),
 }
 
 impl From<RoleId> for MentionableId {
@@ -1221,7 +1229,8 @@ mod acp_impl {
             let Self { id, permission } = *self;
             let shim = match id {
                 MentionableId::Role(role) => Shim { kind: 1, id: UserId(role.0), permission },
-                MentionableId::User(id) => Shim { kind: 2, id, permission }
+                MentionableId::User(id) => Shim { kind: 2, id, permission },
+                MentionableId::Channel(id) => Shim { kind: 3, id: UserId(id.0), permission },
             };
             shim.serialize(s)
         }
@@ -1240,8 +1249,13 @@ mod acp_impl {
                 2 => {
                     Ok(Self { id: MentionableId::User(id), permission })
                 }
+                // channel
+                3 => {
+                    let channel = ChannelId(id.0);
+                    Ok(Self { id: MentionableId::Channel(channel), permission })
+                }
                 #[allow(clippy::cast_lossless)]
-                bad => Err(D::Error::invalid_value(Unexpected::Unsigned(bad as _), &"1 (role) or 2 (user)")),
+                bad => Err(D::Error::invalid_value(Unexpected::Unsigned(bad as _), &"1 (role), 2 (user), or 3 (channel)")),
             }
         }
     }

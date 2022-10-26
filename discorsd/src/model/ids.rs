@@ -100,6 +100,7 @@ id_impl!(
     SkuId,
     TeamId,
     TagId,
+    RuleId,
 );
 
 mod sealed {

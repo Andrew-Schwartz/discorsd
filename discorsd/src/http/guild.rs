@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::BotState;
-use crate::commands::{ApplicationCommand, CommandPermissions, GuildCommandPermissions};
+use crate::commands::{ApplicationCommand, CommandPermissions, GuildApplicationCommandPermission};
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::routes::Route::*;
 use crate::model::guild::GuildMember;
@@ -108,7 +108,7 @@ pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
         state: State,
         guild: GuildId,
         permissions: Vec<CommandPermissions>,
-    ) -> ClientResult<()>
+    ) -> ClientResult<GuildApplicationCommandPermission>
         where B: Send + Sync + 'static,
               State: AsRef<BotState<B>> + Send
     {
@@ -149,7 +149,7 @@ pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
         state: State,
         guild: GuildId,
         roles: Roles,
-    ) -> ClientResult<()>
+    ) -> ClientResult<GuildApplicationCommandPermission>
         where B: Send + Sync + 'static,
               State: AsRef<BotState<B>> + Send,
               Roles: IntoIterator<Item=R> + Send,
@@ -167,7 +167,7 @@ pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
         state: State,
         guild: GuildId,
         roles: Roles,
-    ) -> ClientResult<()>
+    ) -> ClientResult<GuildApplicationCommandPermission>
         where B: Send + Sync + 'static,
               State: AsRef<BotState<B>> + Send,
               Roles: IntoIterator<Item=R> + Send,
@@ -185,7 +185,7 @@ pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
         state: State,
         guild: GuildId,
         users: Users,
-    ) -> ClientResult<()>
+    ) -> ClientResult<GuildApplicationCommandPermission>
         where B: Send + Sync + 'static,
               State: AsRef<BotState<B>> + Send,
               Users: IntoIterator<Item=U> + Send,
@@ -203,7 +203,7 @@ pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
         state: State,
         guild: GuildId,
         users: Users,
-    ) -> ClientResult<()>
+    ) -> ClientResult<GuildApplicationCommandPermission>
         where B: Send + Sync + 'static,
               State: AsRef<BotState<B>> + Send,
               Users: IntoIterator<Item=U> + Send,
@@ -224,25 +224,25 @@ impl CommandPermsExt for &mut ApplicationCommand {}
 impl CommandPermsExt for CommandId {}
 
 // todo duplicate ^ here?
-#[async_trait]
-pub trait GuildCommandPermsExt: Id<Id=GuildId> {
-    /// This endpoint will overwrite ALL existing permissions for all commands in a guild, even
-    /// those not in the `permissions` list.
-    async fn batch_edit_permissions<B, State>(
-        &self,
-        state: State,
-        permissions: Vec<GuildCommandPermissions>,
-    ) -> ClientResult<()>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send {
-        let state = state.as_ref();
-        let id = self.id();
-        state.client.batch_edit_application_command_permissions(
-            state.application_id(),
-            id,
-            permissions,
-        ).await
-    }
-}
-
-impl<G: Id<Id=GuildId>> GuildCommandPermsExt for G {}
+// #[async_trait]
+// pub trait GuildCommandPermsExt: Id<Id=GuildId> {
+//     /// This endpoint will overwrite ALL existing permissions for all commands in a guild, even
+//     /// those not in the `permissions` list.
+//     async fn batch_edit_permissions<B, State>(
+//         &self,
+//         state: State,
+//         permissions: Vec<GuildCommandPermissions>,
+//     ) -> ClientResult<()>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send {
+//         let state = state.as_ref();
+//         let id = self.id();
+//         state.client.batch_edit_application_command_permissions(
+//             state.application_id(),
+//             id,
+//             permissions,
+//         ).await
+//     }
+// }
+//
+// impl<G: Id<Id=GuildId>> GuildCommandPermsExt for G {}

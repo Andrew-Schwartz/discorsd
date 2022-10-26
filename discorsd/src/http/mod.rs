@@ -149,7 +149,7 @@ impl DiscordClient {
               Fut: Future<Output=ClientResult<T>> + Send,
               T: DeserializeOwned,
     {
-        let Request { method, route, query, body, multipart, getter } = request;
+        let Request { method, route, query, body, multipart, getter: parse_json } = request;
         let key = BucketKey::from(&route);
         let async_operation = || async {
             let mut builder = self.client.request(method.clone(), &route.url());
@@ -176,6 +176,7 @@ impl DiscordClient {
                     }
                 } else {
                     let permanent = if let Ok(error) = response.nice_json().await {
+                        println!("discord error = {:?}", error);
                         ClientError::Discord(error)
                     } else {
                         ClientError::Http(status, route.clone())
@@ -184,7 +185,7 @@ impl DiscordClient {
                 };
                 Err(err)
             } else {
-                Ok(getter(response).await?)
+                Ok(parse_json(response).await?)
             }
         };
         backoff::future::retry_notify(

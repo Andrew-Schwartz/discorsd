@@ -252,7 +252,7 @@ pub trait MessageChannelExt: Id<Id=ChannelId> {
         let state = state.as_ref();
         let message = message.into();
         let channel = state.cache.channel(self.id()).await.unwrap();
-        let perms = Permissions::get_own(&state.cache, &channel).await;
+        let perms = Permissions::get_own(&state.cache, &channel, channel.guild_id().unwrap()).await;
         let check_perms = |perm: Permissions|
             (perms.contains(perm))
                 .then(|| ())
@@ -555,8 +555,8 @@ pub struct CreateMessage {
     #[serde(skip_serializing)]
     pub files: HashSet<MessageAttachment>,
     /// embedded rich content
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub embed: Option<RichEmbed>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub embeds: Vec<RichEmbed>,
     /// allowed mentions for a message
     pub allowed_mentions: Option<AllowedMentions>,
     /// include to make your message a reply
@@ -578,7 +578,7 @@ impl<S: Into<Cow<'static, str>>> From<S> for CreateMessage {
 
 impl From<RichEmbed> for CreateMessage {
     fn from(e: RichEmbed) -> Self {
-        Self { embed: Some(e), ..Default::default() }
+        Self { embeds: vec!(e), ..Default::default() }
     }
 }
 
@@ -591,7 +591,7 @@ impl From<MessageAttachment> for CreateMessage {
 }
 
 impl From<Message> for CreateMessage {
-    fn from(mut message: Message) -> Self {
+    fn from(message: Message) -> Self {
         Self {
             content: message.content.into(),
             nonce: None,
@@ -600,7 +600,7 @@ impl From<Message> for CreateMessage {
             files: message.attachments.into_iter()
                 .map(|a| MessageAttachment::from_url(a.filename, &a.url).unwrap())
                 .collect(),
-            embed: message.embeds.pop().map(|embed| embed.into()),
+            embeds: message.embeds.into_iter().map(|embed| embed.into()).collect(),
             // todo
             allowed_mentions: None,
             message_reference: message.message_reference,
@@ -659,14 +659,17 @@ impl CreateMessage {
 
     /// Build a [`RichEmbed`] and attach it to this message.
     pub fn embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) {
-        let embed = self.embed.take().unwrap_or_default();
+        // todo is this still correct
+        let embed = self.embeds.pop().unwrap_or_default();
         self.embed_with(embed, builder);
     }
 
     /// Build a [`RichEmbed`] by modifying an already existing `RichEmbed` and attach it to this
     /// message.
     pub fn embed_with<F: FnOnce(&mut RichEmbed)>(&mut self, embed: RichEmbed, builder: F) {
-        self.embed = Some(RichEmbed::build(embed, builder));
+        // todo is this still correct
+        self.embeds.push(embed.build(builder));
+        // self.embeds = Some(RichEmbed::build(embed, builder));
     }
 
     /// Attach an image to this message. See [`MessageAttachment`] for details about what types impl
@@ -1163,14 +1166,19 @@ impl MessageWithFiles for CreateMessage {
     fn take_files(&mut self) -> HashSet<MessageAttachment> {
         use std::mem;
         let mut files = mem::take(&mut self.files);
-        if let Some(embed) = &mut self.embed {
-            files.extend(mem::take(&mut embed.files));
-        }
+        // todo make sure this is still correct
+        files.extend(
+            self.embeds.iter_mut()
+                .flat_map(|e| mem::take(&mut e.files))
+        );
+        // if let Some(embed) = &mut self.embeds {
+        //     files.extend(mem::take(&mut embed.files));
+        // }
         files
     }
 
     fn has_other_content(&self) -> bool {
-        !self.content.is_empty() || self.embed.is_some()
+        !self.content.is_empty() || !self.embeds.is_empty()
     }
 }
 

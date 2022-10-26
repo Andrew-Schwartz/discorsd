@@ -40,6 +40,7 @@ pub struct Guild {
     /// todo link when impl'd
     /// only sent when using the `GET Current User Guilds` endpoint and are relative to the requested user
     pub permissions: Option<Permissions>,
+    // todo seems deprecated
     /// voice region id for the guild
     pub region: String,
     /// id of afk channel

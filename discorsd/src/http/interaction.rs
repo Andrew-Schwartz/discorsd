@@ -106,7 +106,6 @@ impl DiscordClient {
         application: ApplicationId,
         commands: Vec<Command>,
     ) -> ClientResult<Vec<ApplicationCommand>> {
-        println!("commands = {:?}", commands);
         self.put(BulkOverwriteGlobalCommands(application), commands).await
     }
 
@@ -250,31 +249,31 @@ impl DiscordClient {
         guild: GuildId,
         command: CommandId,
         permissions: Vec<CommandPermissions>,
-    ) -> ClientResult<()> {
-        self.put_unit(
+    ) -> ClientResult<GuildApplicationCommandPermission> {
+        self.put(
             EditApplicationCommandPermissions(application, guild, command),
             GuildCommandPermissions {
-                id: command,
+                // id: command,
                 permissions,
             },
         ).await
     }
 
-    /// Edits command permissions for a specific command for your application in a guild.
-    ///
-    /// This endpoint will overwrite all existing permissions for all commands in a guild.
-    ///
-    /// # Errors
-    ///
-    /// If the http request fails
-    pub async fn batch_edit_application_command_permissions(
-        &self,
-        application: ApplicationId,
-        guild: GuildId,
-        permissions: Vec<GuildCommandPermissions>,
-    ) -> ClientResult<()> {
-        self.put_unit(BatchEditApplicationCommandPermissions(application, guild), permissions).await
-    }
+    // /// Edits command permissions for a specific command for your application in a guild.
+    // ///
+    // /// This endpoint will overwrite all existing permissions for all commands in a guild.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the http request fails
+    // pub async fn batch_edit_application_command_permissions(
+    //     &self,
+    //     application: ApplicationId,
+    //     guild: GuildId,
+    //     permissions: Vec<GuildCommandPermissions>,
+    // ) -> ClientResult<()> {
+    //     self.put_unit(BatchEditApplicationCommandPermissions(application, guild), permissions).await
+    // }
 
     /// Create a response to an Interaction from the gateway.
     ///

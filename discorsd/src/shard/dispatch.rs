@@ -9,9 +9,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::cache::{Cache, IdMap, Update};
 use crate::commands::{CommandPermissions, MessageInteraction};
-use crate::model::channel::{Channel, ChannelType};
+use crate::model::auto_moderation::{Action, AutoModRule, TriggerType};
+use crate::model::channel::{Channel, ChannelType, Thread, ThreadMember};
+use crate::model::components::ActionRow;
 use crate::model::emoji::{CustomEmoji, Emoji};
-use crate::model::guild::{ExplicitFilterLevel, Guild, GuildFeature, GuildMember, GuildMemberUserless, Integration, MfaLevel, NotificationLevel, PremiumTier, SystemChannelFlags, UnavailableGuild, VerificationLevel};
+use crate::model::guild::{ExplicitFilterLevel, Guild, GuildFeature, GuildMember, Integration, MfaLevel, NotificationLevel, PremiumTier, SystemChannelFlags, UnavailableGuild, VerificationLevel};
 use crate::model::ids::*;
 use crate::model::interaction::{ApplicationCommand, Interaction};
 use crate::model::message::{Attachment, ChannelMention, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageReference, MessageType, Reaction, StickerItem};
@@ -19,7 +21,6 @@ use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::model::voice::VoiceState;
 use crate::shard::model::{Activity, StatusType};
-use crate::model::components::ActionRow;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Debug, Clone)]
@@ -35,6 +36,14 @@ pub(crate) enum DispatchPayload {
     ChannelDelete(ChannelDelete),
     ChannelPinsUpdate(ChannelPinsUpdate),
 
+    // Threads
+    ThreadCreate(ThreadCreate),
+    ThreadUpdate(ThreadUpdate),
+    ThreadDelete(ThreadDelete),
+    ThreadListSync(ThreadListSync),
+    ThreadMemberUpdate(ThreadMemberUpdate),
+    ThreadMembersUpdate(ThreadMembersUpdate),
+
     // Guilds
     GuildCreate(GuildCreate),
     GuildUpdate(GuildUpdate),
@@ -42,15 +51,25 @@ pub(crate) enum DispatchPayload {
     GuildBanAdd(BanAdd),
     GuildBanRemove(BanRemove),
     GuildEmojisUpdate(EmojiUpdate),
-    GuildIntegrationsUpdate(IntegrationsUpdate),
-    IntegrationUpdate(IntegrationUpdate),
+    GuildStickersUpdate(StickerUpdate),
+    GuildIntegrationsUpdate(GuildIntegrationsUpdate),
     GuildMemberAdd(GuildMemberAdd),
     GuildMemberRemove(GuildMemberRemove),
     GuildMemberUpdate(GuildMemberUpdate),
     GuildMembersChunk(GuildMembersChunk),
     GuildRoleCreate(GuildRoleCreate),
     GuildRoleUpdate(GuildRoleUpdate),
-    GuildRoleRemove(GuildRoleDelete),
+    GuildRoleDelete(GuildRoleDelete),
+    GuildScheduledEventCreate(GuildScheduledEventCreate),
+    GuildScheduledEventUpdate(GuildScheduledEventUpdate),
+    GuildScheduledEventDelete(GuildScheduledEventDelete),
+    GuildScheduledEventUserAdd(GuildScheduledEventUserAdd),
+    GuildScheduledEventUserRemove(GuildScheduledEventUserRemove),
+
+    // Integrations
+    IntegrationCreate(IntegrationCreate),
+    IntegrationUpdate(IntegrationUpdate),
+    IntegrationDelete(IntegrationDelete),
 
     // Invites
     InviteCreate(InviteCreate),
@@ -67,6 +86,11 @@ pub(crate) enum DispatchPayload {
     MessageReactionRemoveAll(ReactionRemoveAll),
     MessageReactionRemoveEmoji(ReactionRemoveEmoji),
 
+    // Stage
+    StageInstanceCreate(StageInstanceCreate),
+    StageInstanceUpdate(StageInstanceUpdate),
+    StageInstanceDelete(StageInstanceDelete),
+
     // Presence
     PresenceUpdate(PresenceUpdate),
     TypingStart(TypingStart),
@@ -81,10 +105,16 @@ pub(crate) enum DispatchPayload {
 
     // Commands
     InteractionCreate(InteractionCreate),
-    ApplicationCommandCreate(ApplicationCommandCreate),
-    ApplicationCommandUpdate(ApplicationCommandUpdate),
-    ApplicationCommandDelete(ApplicationCommandDelete),
+    // ApplicationCommandCreate(ApplicationCommandCreate),
+    // ApplicationCommandUpdate(ApplicationCommandUpdate),
+    // ApplicationCommandDelete(ApplicationCommandDelete),
     ApplicationCommandPermissionsUpdate(ApplicationCommandPermissionsUpdate),
+
+    // Auto mod
+    AutoModerationRuleCreate(AutoModerationRuleCreate),
+    AutoModerationRuleUpdate(AutoModerationRuleUpdate),
+    AutoModerationRuleDelete(AutoModerationRuleDelete),
+    AutoModerationActionExecution(AutoModerationActionExecution),
 }
 
 #[async_trait]
@@ -112,7 +142,7 @@ impl<'a> Update for DispatchPayload {
             GuildMembersChunk(members_chunk) => members_chunk.update(cache).await,
             GuildRoleCreate(role_create) => role_create.update(cache).await,
             GuildRoleUpdate(role_update) => role_update.update(cache).await,
-            GuildRoleRemove(role_remove) => role_remove.update(cache).await,
+            GuildRoleDelete(role_delete) => role_delete.update(cache).await,
             InviteCreate(invite_create) => invite_create.update(cache).await,
             InviteDelete(invite_delete) => invite_delete.update(cache).await,
             MessageCreate(message_create) => message_create.update(cache).await,
@@ -130,10 +160,32 @@ impl<'a> Update for DispatchPayload {
             VoiceServerUpdate(voice_server_update) => voice_server_update.update(cache).await,
             WebhooksUpdate(webhooks_update) => webhooks_update.update(cache).await,
             InteractionCreate(interactions) => interactions.update(cache).await,
-            ApplicationCommandCreate(create) => create.update(cache).await,
-            ApplicationCommandUpdate(update) => update.update(cache).await,
-            ApplicationCommandDelete(delete) => delete.update(cache).await,
+            // ApplicationCommandCreate(create) => create.update(cache).await,
+            // ApplicationCommandUpdate(update) => update.update(cache).await,
+            // ApplicationCommandDelete(delete) => delete.update(cache).await,
             ApplicationCommandPermissionsUpdate(update) => update.update(cache).await,
+            // todo
+            ThreadCreate(_) => {}
+            ThreadUpdate(_) => {}
+            ThreadDelete(_) => {}
+            ThreadListSync(_) => {}
+            ThreadMemberUpdate(_) => {}
+            ThreadMembersUpdate(_) => {}
+            GuildStickersUpdate(_) => {}
+            GuildScheduledEventCreate(_) => {}
+            GuildScheduledEventUpdate(_) => {}
+            GuildScheduledEventDelete(_) => {}
+            GuildScheduledEventUserAdd(_) => {}
+            GuildScheduledEventUserRemove(_) => {}
+            IntegrationCreate(_) => {}
+            IntegrationDelete(_) => {}
+            StageInstanceCreate(_) => {}
+            StageInstanceUpdate(_) => {}
+            StageInstanceDelete(_) => {}
+            AutoModerationRuleCreate(_) => {}
+            AutoModerationRuleUpdate(_) => {}
+            AutoModerationRuleDelete(_) => {}
+            AutoModerationActionExecution(_) => {}
         };
     }
 }
@@ -203,7 +255,7 @@ impl Update for Ready {
 /// (for resuming existing sessions).
 #[derive(Deserialize, Debug, Clone)]
 pub struct Resumed {
-    _trace: Vec<serde_json::Value>
+    _trace: Vec<serde_json::Value>,
 }
 
 #[async_trait]
@@ -224,7 +276,6 @@ pub struct ChannelCreate {
 #[async_trait]
 impl Update for ChannelCreate {
     async fn update(&self, cache: &Cache) {
-        // info!("create = {:?}", &self);
         let channel = &self.channel;
         if let Some(guild) = channel.guild_id() {
             cache.guilds.write().await
@@ -268,13 +319,12 @@ impl Update for ChannelCreate {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct ChannelUpdate {
-    channel: Channel
+    channel: Channel,
 }
 
 #[async_trait]
 impl Update for ChannelUpdate {
     async fn update(&self, cache: &Cache) {
-        println!("self = {:?}", self);
         let channel = &self.channel;
         if let Some(guild) = channel.guild_id() {
             cache.guilds.write().await
@@ -330,22 +380,23 @@ impl Update for ChannelUpdate {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct ChannelDelete {
-    channel: Channel
+    channel: Channel,
 }
 
 #[async_trait]
 impl Update for ChannelDelete {
     async fn update(&self, cache: &Cache) {
+        println!("DELETE self = {:#?}", self);
         cache.channel_types.write().await.remove(&self.channel.id());
         match &self.channel {
-            Channel::Text(text) => { cache.channels.write().await.remove(text); },
+            Channel::Text(text) => { cache.channels.write().await.remove(text); }
             Channel::Dm(dm) => {
                 let (by_user, by_channel) = &mut *cache.dms.write().await;
                 by_user.remove(&dm.recipient.id);
                 by_channel.remove(dm);
             }
-            Channel::Category(cat) => { cache.categories.write().await.remove(cat); },
-            Channel::Announcement(news) => { cache.news.write().await.remove(news); },
+            Channel::Category(cat) => { cache.categories.write().await.remove(cat); }
+            Channel::Announcement(news) => { cache.news.write().await.remove(news); }
             // Channel::Store(store) => { cache.stores.write().await.remove(store); },
             Channel::Voice(_) | Channel::GroupDm(_) => {}
             // todo
@@ -412,7 +463,7 @@ impl Update for ChannelPinsUpdate {
                             Channel::Text(channel) => channel.last_pin_timestamp = last_pin_timestamp,
                             Channel::Announcement(channel) => channel.last_pin_timestamp = last_pin_timestamp,
                             // no last timestamp
-                            Channel::Voice(_)  | Channel::Category(_) => {}
+                            Channel::Voice(_) | Channel::Category(_) => {}
                             // not in a guild
                             Channel::Dm(_) | Channel::GroupDm(_) => {}
                             // todo
@@ -441,6 +492,8 @@ impl Update for ChannelPinsUpdate {
 #[serde(transparent)]
 pub struct GuildCreate {
     pub(crate) guild: Guild,
+    // todo this is in the guild
+    // pub(crate) threads: Vec<Thread>,
 }
 
 #[async_trait]
@@ -453,9 +506,21 @@ impl Update for GuildCreate {
                 .for_each(|channel| {
                     guard.insert(channel.id(), channel.channel_type());
                     match channel {
-                        Channel::Text(text) => t.push(text.clone()),
-                        Channel::Category(category) => c.push(category.clone()),
-                        Channel::Announcement(news) => n.push(news.clone()),
+                        Channel::Text(text) => {
+                            let mut text = text.clone();
+                            text.guild_id = Some(self.guild.id);
+                            t.push(text)
+                        }
+                        Channel::Category(category) => {
+                            let mut category = category.clone();
+                            category.guild_id = Some(self.guild.id);
+                            c.push(category)
+                        }
+                        Channel::Announcement(news) => {
+                            let mut news = news.clone();
+                            news.guild_id = Some(self.guild.id);
+                            n.push(news)
+                        }
                         // Channel::Store(store) => s.push(store.clone()),
                         Channel::Voice(_) => {
                             // not (yet/ever) implemented
@@ -678,13 +743,13 @@ impl Update for IntegrationUpdate {
 
 /// Sent when a guild integration is updated.
 #[derive(Deserialize, Debug, Clone)]
-pub struct IntegrationsUpdate {
+pub struct GuildIntegrationsUpdate {
     /// id of the guild whose integrations were updated
     pub guild_id: GuildId,
 }
 
 #[async_trait]
-impl Update for IntegrationsUpdate {
+impl Update for GuildIntegrationsUpdate {
     async fn update(&self, _cache: &Cache) {
         // nothing has to happen here
     }
@@ -986,9 +1051,9 @@ impl Update for MessageCreate {
 pub struct MessageUpdate {
     pub(crate) id: MessageId,
     pub(crate) channel_id: ChannelId,
-    pub(crate) guild_id: Option<Option<GuildId>>,
+    // pub(crate) guild_id: Option<Option<GuildId>>,
     pub(crate) author: Option<User>,
-    pub(crate) member: Option<Option<GuildMemberUserless>>,
+    // pub(crate) member: Option<Option<GuildMemberUserless>>,
     pub(crate) content: Option<String>,
     pub(crate) timestamp: Option<DateTime<Utc>>,
     pub(crate) edited_timestamp: Option<Option<DateTime<Utc>>>,
@@ -1015,6 +1080,7 @@ pub struct MessageUpdate {
     pub(crate) thread: Option<Option<Channel>>,
     pub(crate) components: Option<Vec<ActionRow>>,
     pub(crate) sticker_items: Option<Vec<StickerItem>>,
+    pub(crate) position: Option<Option<usize>>,
 }
 
 impl TryFrom<MessageUpdate> for Message {
@@ -1026,9 +1092,9 @@ impl TryFrom<MessageUpdate> for Message {
             Some(Message {
                 id: update.id,
                 channel: update.channel_id,
-                guild_id: update.guild_id.unwrap_or_default(),
+                // guild_id: update.guild_id.unwrap_or_default(),
                 author: update.author?,
-                member: update.member.unwrap_or_default(),
+                // member: update.member.unwrap_or_default(),
                 content: update.content?,
                 timestamp: update.timestamp?,
                 edited_timestamp: update.edited_timestamp.unwrap_or_default(),
@@ -1054,6 +1120,7 @@ impl TryFrom<MessageUpdate> for Message {
                 thread: update.thread.unwrap_or_default(),
                 components: update.components.unwrap_or_default(),
                 sticker_items: update.sticker_items.unwrap_or_default(),
+                position: update.position.unwrap_or_default(),
             })
         }
         option(update).ok_or(())
@@ -1074,9 +1141,9 @@ impl Update for MessageUpdate {
                 }
                 let message = e.get_mut();
                 let s = self.clone();
-                update(&mut message.guild_id, s.guild_id);
+                // update(&mut message.guild_id, s.guild_id);
                 update(&mut message.author, s.author);
-                update(&mut message.member, s.member);
+                // update(&mut message.member, s.member);
                 update(&mut message.content, s.content);
                 update(&mut message.edited_timestamp, s.edited_timestamp);
                 update(&mut message.tts, s.tts);
@@ -1557,3 +1624,138 @@ pub struct ApplicationCommandPermissionsUpdate {
 impl Update for ApplicationCommandPermissionsUpdate {
     async fn update(&self, _cache: &Cache) {}
 }
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct AutoModerationRuleCreate {
+    #[serde(flatten)]
+    rule: AutoModRule,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct AutoModerationRuleUpdate {
+    #[serde(flatten)]
+    rule: AutoModRule,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct AutoModerationRuleDelete {
+    #[serde(flatten)]
+    rule: AutoModRule,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct AutoModerationActionExecution {
+    /// ID of the guild in which action was executed
+    pub guild_id: GuildId,
+    /// Action which was executed
+    pub action: Action,
+    /// ID of the rule which action belongs to
+    pub rule_id: RuleId,
+    /// Trigger type of rule which was triggered
+    pub rule_trigger_type: TriggerType,
+    /// ID of the user which generated the content which triggered the rule
+    pub user_id: UserId,
+    /// ID of the channel in which user content was posted
+    pub channel_id: Option<ChannelId>,
+    /// ID of any user message which content belongs to
+    ///
+    /// will not exist if message was blocked by automod or content was not part of any message
+    pub message_id: Option<MessageId>,
+    /// ID of any system auto moderation messages posted as a result of this action
+    ///
+    /// will not exist if this event does not correspond to an action with type SEND_ALERT_MESSAGE
+    pub alert_system_message_id: Option<MessageId>,
+    /// User-generated text content
+    ///
+    /// MESSAGE_CONTENT (1 << 15) gateway intent is required to receive the content and matched_content fields
+    pub content: Option<String>,
+    /// Word or phrase configured in the rule that triggered the rule
+    pub matched_keyword: Option<String>,
+    /// Substring in content that triggered the rule
+    ///
+    /// MESSAGE_CONTENT (1 << 15) gateway intent is required to receive the content and matched_content fields
+    pub matched_content: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct ThreadCreate {
+    // todo also has a `newly_created` boolean field
+    #[serde(flatten)]
+    thread: Thread,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct ThreadUpdate {
+    #[serde(flatten)]
+    thread: Thread,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct ThreadDelete {
+    id: ChannelId,
+    guild_id: GuildId,
+    parent_id: Option<ChannelId>,
+    #[serde(rename = "type")]
+    kind: ChannelType,
+}
+
+/// Sent when the current user gains access to a channel.
+#[derive(Deserialize, Debug, Clone)]
+pub struct ThreadListSync {
+    /// ID of the guild
+    pub guild_id: GuildId,
+    /// Parent channel IDs whose threads are being synced. If omitted, then threads were synced for the entire guild. This array may contain channel_ids that have no active threads as well, so you know to clear that data.
+    #[serde(default)]
+    pub channel_ids: Vec<ChannelId>,
+    /// All active threads in the given channels that the current user can access
+    pub threads: Vec<Thread>,
+    /// All thread member objects from the synced threads for the current user, indicating which threads the current user has been added to
+    pub members: Vec<ThreadMember>,
+}
+
+/// Sent when the thread member object for the current user is updated.
+#[derive(Deserialize, Debug, Clone)]
+pub struct ThreadMemberUpdate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct ThreadMembersUpdate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StickerUpdate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GuildScheduledEventCreate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GuildScheduledEventUpdate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GuildScheduledEventDelete {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GuildScheduledEventUserAdd {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GuildScheduledEventUserRemove {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct IntegrationCreate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct IntegrationDelete {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StageInstanceCreate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StageInstanceUpdate {}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StageInstanceDelete {}

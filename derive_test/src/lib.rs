@@ -3,6 +3,8 @@
 mod tests {
     use command_data_derive::*;
     use discorsd::BotState;
+    use discorsd::model::guild::GuildMember;
+    use discorsd::model::user::User;
 
     struct TestBot;
 
@@ -24,9 +26,9 @@ mod tests {
                 async fn run(
                     &self,
                     _: std::sync::Arc<discorsd::BotState<TestBot>>,
-                    interaction: discorsd::commands::InteractionUse<discorsd::commands::Unused>,
+                    interaction: discorsd::commands::InteractionUse<discorsd::commands::SlashCommandData, discorsd::commands::Unused>,
                     data: Self::Data
-                ) -> Result<discorsd::commands::InteractionUse<discorsd::commands::Used>, discorsd::errors::BotError> {
+                ) -> Result<discorsd::commands::InteractionUse<discorsd::commands::SlashCommandData, discorsd::commands::Used>, discorsd::errors::BotError> {
                     // Ok to let the test know we succeeded
                     println!("data = {:?}", data);
                     Ok(interaction.into())
@@ -48,21 +50,21 @@ mod tests {
 
     async fn assert_perms_parsing<C: discorsd::commands::SlashCommandRaw<Bot=TestBot>>(command: &C) {
         async fn test_run_data<C: discorsd::commands::SlashCommandRaw<Bot=TestBot>>(command: &C, data: discorsd::commands::ApplicationCommandInteractionData) {
-            use std::convert::TryInto;
             use chrono::Utc;
             use discorsd::model::ids::*;
             use discorsd::commands::*;
 
-            let data = data.clone().try_into().unwrap();
-            let interaction = Interaction {
-                id: InteractionId(1234),
-                kind: InteractionType::ApplicationCommand,
-                data,
-                source: InteractionSource::Guild(GuildSource {
+            let data: ApplicationCommandData = data.try_into().unwrap();
+            let interaction = InteractionUse::new(
+                InteractionId(1234),
+                ApplicationId(1234),
+                SlashCommandData { command: data.id, command_name: data.name },
+                ChannelId(1234),
+                InteractionSource::Guild(GuildSource {
                     id: GuildId(1234),
-                    member: discorsd::model::guild::GuildMember {
-                        user: discorsd::model::user::User {
-                            id: UserId(1234),
+                    member: GuildMember {
+                        user: User {
+                            id: UserId(0),
                             username: "".to_string(),
                             discriminator: "".to_string(),
                             avatar: None,
@@ -74,7 +76,7 @@ mod tests {
                             email: None,
                             flags: None,
                             premium_type: None,
-                            public_flags: None,
+                            public_flags: None
                         },
                         nick: None,
                         roles: Default::default(),
@@ -82,15 +84,15 @@ mod tests {
                         premium_since: None,
                         deaf: false,
                         mute: false,
-                        pending: false,
-                    },
+                        pending: false
+                    }
                 }),
-                channel_id: ChannelId(1234),
-                token: "".to_string(),
-            };
-            let (iu, data) = InteractionUse::new(interaction);
+                "TOKEN".into(),
+            );
             let state = BotState::testing_state(TestBot);
-            command.run(state, iu, data).await.unwrap();
+            let data = data.options;
+
+            command.run(state, interaction, data).await.unwrap();
         }
 
         use discorsd::commands::{

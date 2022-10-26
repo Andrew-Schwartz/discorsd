@@ -84,6 +84,7 @@ impl Cache {
     pub async fn channel<C: Id<Id=ChannelId> + Send>(&self, id: C) -> Option<Channel> {
         let id = id.id();
         let channel_type = self.channel_types.read().await.get(&id).copied();
+        println!("channel_type = {:?}", channel_type);
         match channel_type {
             Some(ChannelType::GuildText) => self.channels.read().await.get(&id).cloned().map(Channel::Text),
             Some(ChannelType::Dm) => self.dms.read().await.1.get(&id).cloned().map(Channel::Dm),
@@ -173,7 +174,8 @@ impl Cache {
             guilds,
             members,
             channel_types,
-            dms, channels,
+            dms,
+            channels,
             categories,
             news,
             // stores,

@@ -24,6 +24,7 @@ pub mod interaction;
 pub mod commands;
 pub mod components;
 pub mod locales;
+pub mod auto_moderation;
 
 /// Information returned from the `/gateway/bot` endpoint, as in
 /// [gateway](crate::http::DiscordClient::gateway).

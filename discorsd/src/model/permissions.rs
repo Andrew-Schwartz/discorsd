@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
 use crate::cache::Cache;
-use crate::model::channel::{Channel, OverwriteType};
+use crate::model::channel::{Channel, Overwrite, OverwriteType};
 use crate::model::guild::GuildMember;
 use crate::model::ids::*;
 pub use crate::model::ids::RoleId;
@@ -158,20 +158,19 @@ bitflags! {
 }
 
 impl Permissions {
-    pub async fn get(cache: &Cache, member: &GuildMember, channel: &Channel) -> Self {
-        let guild = channel.guild_id().unwrap();
+    pub async fn get(cache: &Cache, member: &GuildMember, channel: &Channel, guild: GuildId) -> Self {
         let everyone = cache.everyone_role(&guild).await;
 
         let base_permissions = Self::base_permissions(
-            cache, member, channel.guild_id().unwrap(), &everyone,
+            cache, member, guild, &everyone,
         ).await;
-        base_permissions.overwrites(member, channel, &everyone).await
+        // let overwrites = cache.channel(channel).await;
+        base_permissions.overwrites(member, channel.overwrites(), &everyone)
     }
 
-    pub async fn get_own(cache: &Cache, channel: &Channel) -> Self {
-        let guild = channel.guild_id().unwrap();
+    pub async fn get_own(cache: &Cache, channel: &Channel, guild: GuildId) -> Self {
         let member = cache.member(guild, cache.own_user().await).await.unwrap();
-        Self::get(cache, &member, channel).await
+        Self::get(cache, &member, channel, guild).await
     }
 
     async fn base_permissions(cache: &Cache, member: &GuildMember, guild: GuildId, everyone: &Role) -> Self {
@@ -188,13 +187,13 @@ impl Permissions {
         }
     }
 
-    async fn overwrites(self, member: &GuildMember, channel: &Channel, everyone: &Role) -> Self {
+    fn overwrites(self, member: &GuildMember, overwrites: Option<&[Overwrite]>, everyone: &Role) -> Self {
         // ADMINISTRATOR overrides any potential permission overwrites, so there is nothing to do here.
         if self.contains(Self::ADMINISTRATOR) { return Self::all(); }
 
         let mut perms = self;
 
-        if let Some(overwrites) = channel.overwrites() {
+        if let Some(overwrites) = overwrites {
             let (role_overwrites, member_overwrites): (HashMap<_, _>, HashMap<_, _>) = overwrites.iter()
                 .partition_map(|overwrite| match overwrite.id {
                     OverwriteType::Role(role) => Either::Left((role, (overwrite.allow, overwrite.deny))),

@@ -213,8 +213,19 @@ impl Identify {
     }
 
     /// Override the default intents (all non-privileged intents).
-    pub const fn intents(mut self, intents: Intents) -> Self {
+    pub const fn set_intents(mut self, intents: Intents) -> Self {
         self.intents = intents;
+        self
+    }
+
+    /// Add intents to the default
+    pub fn add_intents(mut self, intents: Intents) -> Self {
+        self.intents |= intents;
+        self
+    }
+
+    pub fn remove_intents(mut self, intents: Intents) -> Self {
+        self.intents ^= intents;
         self
     }
 }

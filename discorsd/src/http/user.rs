@@ -8,7 +8,7 @@ use crate::BotState;
 use crate::http::{ClientResult, DiscordClient, ImageData};
 use crate::http::channel::{CreateMessage, MessageChannelExt};
 use crate::http::routes::Route::*;
-use crate::model::channel::DmChannel;
+use crate::model::channel::{ChannelType, DmChannel};
 use crate::model::guild::PartialGuild;
 use crate::model::ids::*;
 use crate::model::message::Message;
@@ -101,9 +101,12 @@ pub trait UserExt: Id<Id=UserId> + Sized {
         } else {
             let dm = state.client.create_dm(self.id()).await?;
             // todo is this necessary or does it just happen in ChannelCreate anyways?
-            let (by_user, by_channel) = &mut *state.cache.dms.write().await;
-            by_user.insert(self.id(), dm.id);
-            by_channel.insert(dm.clone());
+            {
+                let (by_user, by_channel) = &mut *state.cache.dms.write().await;
+                by_user.insert(self.id(), dm.id);
+                by_channel.insert(dm.clone());
+            }
+            state.cache.channel_types.write().await.insert(dm.id, ChannelType::Dm);
             Ok(dm)
         }
     }
@@ -118,19 +121,7 @@ pub trait UserExt: Id<Id=UserId> + Sized {
         Msg: Into<CreateMessage> + Send + Sync,
     {
         let dm = self.dm(&state).await?;
-        dm.send(state.as_ref(), message).await
-    }
-
-    async fn send_dm_unchecked<B, State, Msg>(
-        &self,
-        state: State,
-        message: Msg,
-    ) -> ClientResult<Message> where
-        B: Send + Sync + 'static,
-        State: AsRef<BotState<B>> + Send + Sync,
-        Msg: Into<CreateMessage> + Send + Sync,
-    {
-        let dm = self.dm(&state).await?;
+        // no permissions in a dm channel
         dm.send_unchecked(state.as_ref(), message).await
     }
 }

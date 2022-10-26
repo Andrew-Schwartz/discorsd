@@ -33,7 +33,7 @@ features = ["tokio-runtime", "tokio-native-tls"]
 version = "0.17.2"
 
 [dependencies.reqwest]
-version = "0.11.3"
+version = "0.11.12"
 features = ["json", "stream", "multipart"]
 
 [dependencies.serde]

@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
@@ -200,12 +201,12 @@ impl Channel {
         }
     }
 
-    pub const fn overwrites(&self) -> Option<&Vec<Overwrite>> {
+    pub fn overwrites(&self) -> Option<&[Overwrite]> {
         match self {
-            Self::Text(t) => Some(&t.permission_overwrites),
-            Self::Voice(v) => Some(&v.permission_overwrites),
-            Self::Category(c) => Some(&c.permission_overwrites),
-            Self::Announcement(n) => Some(&n.permission_overwrites),
+            Self::Text(t) => Some(t.permission_overwrites.deref()),
+            Self::Voice(v) => Some(v.permission_overwrites.deref()),
+            Self::Category(c) => Some(c.permission_overwrites.deref()),
+            Self::Announcement(n) => Some(n.permission_overwrites.deref()),
             // Self::Store(s) => Some(&s.permission_overwrites),
             Self::Dm(_) | Self::GroupDm(_) => None,
             // todo
@@ -273,7 +274,7 @@ pub struct TextChannel {
     pub last_pin_timestamp: Option<DateTime<Utc>>,
     /// default duration, copied onto newly created threads, in minutes, threads will stop showing
     /// in the channel list after the specified period of inactivity
-    pub default_auto_archive_duration: ThreadArchiveDuration,
+    pub default_auto_archive_duration: Option<ThreadArchiveDuration>,
     /// computed permissions for the invoking user in the channel, including overwrites, only included when part of the resolved data received on a slash command interaction
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<Permissions>,
@@ -490,7 +491,7 @@ pub struct AnnouncementChannel {
     pub last_pin_timestamp: Option<DateTime<Utc>>,
     /// default duration, copied onto newly created threads, in minutes, threads will stop showing
     /// in the channel list after the specified period of inactivity
-    pub default_auto_archive_duration: ThreadArchiveDuration,
+    pub default_auto_archive_duration: Option<ThreadArchiveDuration>,
     /// computed permissions for the invoking user in the channel, including overwrites, only included when part of the resolved data received on a slash command interaction
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<Permissions>,
@@ -746,7 +747,7 @@ pub struct GuildForum {
     pub topic: Option<String>,
     /// default duration, copied onto newly created threads, in minutes, threads will stop showing
     /// in the channel list after the specified period of inactivity
-    pub default_auto_archive_duration: ThreadArchiveDuration,
+    pub default_auto_archive_duration: Option<ThreadArchiveDuration>,
     /// channel flags
     pub flags: Option<ChannelFlags>,
     /// the set of tags that can be used in a GUILD_FORUM channel
