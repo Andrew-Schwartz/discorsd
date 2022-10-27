@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
+use reqwest::Method;
 use serde::Serialize;
 
 use crate::commands::{CommandPermissions, GuildApplicationCommandPermission, GuildCommandPermissions};
@@ -144,7 +145,7 @@ impl DiscordClient {
         &self,
         application: ApplicationId,
         guild: GuildId,
-        command: CommandId
+        command: CommandId,
     ) -> ClientResult<ApplicationCommand> {
         self.get(GetGuildCommand(application, guild, command)).await
     }
@@ -286,15 +287,33 @@ impl DiscordClient {
         token: &str,
         response: InteractionResponse,
     ) -> ClientResult<InteractionResponse> {
-        // todo here (or elsewhere ig) validate InteractionResponse!!!
-        //  thats so good because then it can just ? instead of asserting!
-        //  todo do that ^ everywhere? maybe not since then it gets more separated from why/where
-        //   although it kinda already is iirc
-        //   wtf am I talking about here I'm confused
-        self.post_unit(
+        // match response {
+        //     InteractionResponse::Pong
+        //     | InteractionResponse::DeferredChannelMessageWithSource
+        //     | InteractionResponse::DeferredUpdateMessage => {
+        //         self.post_unit(
+        //             CreateInteractionResponse(interaction, token.into()),
+        //             &response,
+        //         ).await.map(|()| response)
+        //     }
+        //     InteractionResponse::ChannelMessageWithSource(message)
+        //     | InteractionResponse::UpdateMessage(message) => {
+        //
+        //     }
+        // }
+        self.send_message_with_files(
             CreateInteractionResponse(interaction, token.into()),
-            &response,
+            response.clone(),
         ).await.map(|()| response)
+        // // todo here (or elsewhere ig) validate InteractionResponse!!!
+        // //  thats so good because then it can just ? instead of asserting!
+        // //  todo do that ^ everywhere? maybe not since then it gets more separated from why/where
+        // //   although it kinda already is iirc
+        // //   wtf am I talking about here I'm confused
+        // self.post_unit(
+        //     CreateInteractionResponse(interaction, token.into()),
+        //     &response,
+        // ).await.map(|()| response)
     }
 
     // todo link to EditWebhookMessage?
@@ -308,11 +327,11 @@ impl DiscordClient {
         application: ApplicationId,
         token: &str,
         message: InteractionMessage,
-    ) -> ClientResult<InteractionMessage> {
-        self.patch_unit(
+    ) -> ClientResult<Message> {
+        self.patch(
             EditInteractionResponse(application, token.into()),
             &message,
-        ).await.map(|()| message)
+        ).await
     }
 
     /// Deletes the initial Interaction response.
@@ -356,10 +375,10 @@ impl DiscordClient {
         message: MessageId,
         edit: InteractionResponse,
     ) -> ClientResult<InteractionResponse> {
-        self.patch_unit(
+        self.patch(
             EditFollowupMessage(application, token.into(), message),
             &edit,
-        ).await.map(|_| edit)
+        ).await.map(|()| edit)
     }
 
     /// Deletes a followup message for an Interaction.

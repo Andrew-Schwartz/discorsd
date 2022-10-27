@@ -14,7 +14,7 @@ use crate::BotState;
 use crate::cache::IdMap;
 use crate::commands::{ButtonCommand, MenuCommand};
 use crate::errors::{CommandOptionTypeParsed, OptionType};
-use crate::http::channel::{embed, RichEmbed};
+use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::model::channel::ChannelType;
 use crate::model::components::{ActionRow, ComponentId};
 use crate::model::guild::GuildMember;
@@ -1771,15 +1771,18 @@ pub struct InteractionMessage {
     /// is the response TTS
     pub tts: bool,
     /// message content
-    content: Cow<'static, str>,
+    pub(crate) content: Cow<'static, str>,
     /// supports up to 10 embeds
-    embeds: Vec<RichEmbed>,
+    pub(crate) embeds: Vec<RichEmbed>,
     /// allowed mentions object
     pub allowed_mentions: Option<AllowedMentions>,
-    /// flags, for setting EPHEMERAL
+    /// Only [MessageFlags::EPHEMERAL] and [MessageFlags::SUPPRESS_EMBEDS] are allowed
     flags: MessageFlags,
     /// message components
     components: Vec<ActionRow>,
+    // todo? does this work
+    #[serde(skip_serializing)]
+    pub files: HashSet<MessageAttachment>,
 }
 
 pub fn ephemeral<C: Into<Cow<'static, str>>>(content: C) -> InteractionMessage {

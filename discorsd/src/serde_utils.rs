@@ -134,7 +134,10 @@ pub trait NiceResponseJson {
 #[async_trait]
 impl NiceResponseJson for Response {
     async fn nice_json<T: DeserializeOwned>(self) -> crate::http::ClientResult<T> {
-        let text = self.text().await?;
+        let mut text = self.text().await?;
+        if text.is_empty() {
+            text = "null".into();
+        }
         Ok(nice_from_str(&text)?)
     }
 }

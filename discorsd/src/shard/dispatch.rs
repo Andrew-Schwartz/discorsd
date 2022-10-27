@@ -16,7 +16,7 @@ use crate::model::emoji::{CustomEmoji, Emoji};
 use crate::model::guild::{ExplicitFilterLevel, Guild, GuildFeature, GuildMember, Integration, MfaLevel, NotificationLevel, PremiumTier, SystemChannelFlags, UnavailableGuild, VerificationLevel};
 use crate::model::ids::*;
 use crate::model::interaction::{ApplicationCommand, Interaction};
-use crate::model::message::{Attachment, ChannelMention, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageReference, MessageType, Reaction, StickerItem};
+use crate::model::message::{Attachment, ChannelMention, ChannelMessageId, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageReference, MessageType, Reaction, StickerItem};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::model::voice::VoiceState;
@@ -1074,7 +1074,7 @@ pub struct MessageUpdate {
     pub(crate) application: Option<Option<MessageApplication>>,
     pub(crate) application_id: Option<Option<ApplicationId>>,
     pub(crate) message_reference: Option<Option<MessageReference>>,
-    pub(crate) flags: Option<Option<MessageFlags>>,
+    pub(crate) flags: Option<MessageFlags>,
     pub(crate) referenced_message: Option<Option<Message>>,
     pub(crate) interaction: Option<Option<MessageInteraction>>,
     pub(crate) thread: Option<Option<Channel>>,
@@ -1338,6 +1338,15 @@ pub struct ReactionUpdate {
     pub guild_id: Option<GuildId>,
     /// the emoji used to react
     pub emoji: Emoji,
+}
+
+impl ReactionUpdate {
+    pub fn channel_message(&self) -> ChannelMessageId {
+        ChannelMessageId {
+            channel: self.channel_id,
+            message: self.message_id,
+        }
+    }
 }
 
 impl From<ReactionAdd> for ReactionUpdate {

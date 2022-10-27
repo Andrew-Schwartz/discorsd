@@ -2,7 +2,6 @@
 
 use std::ffi::OsStr;
 use std::fmt::{self, Display};
-use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -141,15 +140,13 @@ impl DiscordClient {
         Self { token, client, rate_limit }
     }
 
-    async fn request<Q, J, F, R, Fut, T>(&self, request: Request<Q, J, F, R, Fut, T>) -> ClientResult<T>
+    async fn request<Q, J, F, T>(&self, request: Request<Q, J, F>) -> ClientResult<T>
         where Q: Serialize + Send + Sync,
               J: Serialize + Send + Sync,
               F: Fn() -> Option<multipart::Form> + Send + Sync,
-              R: Fn(Response) -> Fut + Send + Sync,
-              Fut: Future<Output=ClientResult<T>> + Send,
               T: DeserializeOwned,
     {
-        let Request { method, route, query, body, multipart, getter: parse_json } = request;
+        let Request { method, route, query, body, multipart } = request;
         let key = BucketKey::from(&route);
         let async_operation = || async {
             let mut builder = self.client.request(method.clone(), &route.url());
@@ -162,18 +159,20 @@ impl DiscordClient {
             if let Some(multipart) = multipart() {
                 builder = builder.multipart(multipart);
             }
-            self.rate_limit.lock().await.rate_limit(&key).await;
+            let rate_limit = {
+                let guard = self.rate_limit.lock().await;
+                guard.get_rate_limit(&key)
+            };
+            if let Some(sleep) = rate_limit {
+                sleep.await;
+            }
             let response = builder.send().await.map_err(ClientError::Request)?;
             let headers = response.headers();
             self.rate_limit.lock().await.update(key, headers);
             if response.status().is_client_error() || response.status().is_server_error() {
                 let status = response.status();
                 let err = if status == StatusCode::TOO_MANY_REQUESTS {
-                    backoff::Error::Transient {
-                        err: ClientError::Http(status, route.clone()),
-                        // use the default backoff policy
-                        retry_after: None,
-                    }
+                    backoff::Error::transient(ClientError::Http(status, route.clone()))
                 } else {
                     let permanent = if let Ok(error) = response.nice_json().await {
                         println!("discord error = {:?}", error);
@@ -185,7 +184,7 @@ impl DiscordClient {
                 };
                 Err(err)
             } else {
-                Ok(parse_json(response).await?)
+                Ok(response.nice_json().await?)
             }
         };
         backoff::future::retry_notify(
@@ -206,7 +205,7 @@ impl DiscordClient {
             Method::GET,
             route,
             || None,
-            NiceResponseJson::nice_json,
+            // NiceResponseJson::nice_json,
         )).await
     }
 
@@ -219,7 +218,7 @@ impl DiscordClient {
             route,
             query,
             || None,
-            NiceResponseJson::nice_json,
+            // NiceResponseJson::nice_json,
         )).await
     }
 
@@ -232,7 +231,7 @@ impl DiscordClient {
             route,
             json,
             || None,
-            NiceResponseJson::nice_json,
+            // NiceResponseJson::nice_json,
         )).await
     }
 
@@ -244,17 +243,7 @@ impl DiscordClient {
             Method::POST,
             route,
             multipart,
-            NiceResponseJson::nice_json,
-        )).await
-    }
-
-    pub(crate) async fn post_unit<J: Serialize + Send + Sync>(&self, route: Route, json: J) -> ClientResult<()> {
-        self.request(Request::with_body(
-            Method::POST,
-            route,
-            json,
-            || None,
-            |_| async { Ok(()) },
+            // NiceResponseJson::nice_json,
         )).await
     }
 
@@ -267,17 +256,7 @@ impl DiscordClient {
             route,
             json,
             || None,
-            NiceResponseJson::nice_json,
-        )).await
-    }
-
-    pub(crate) async fn patch_unit<J: Serialize + Send + Sync>(&self, route: Route, json: J) -> ClientResult<()> {
-        self.request(Request::with_body(
-            Method::PATCH,
-            route,
-            json,
-            || None,
-            |_| async { Ok(()) },
+            // NiceResponseJson::nice_json,
         )).await
     }
 
@@ -290,19 +269,7 @@ impl DiscordClient {
             route,
             json,
             || None,
-            NiceResponseJson::nice_json,
-        )).await
-    }
-
-    pub(crate) async fn put_unit<J>(&self, route: Route, json: J) -> ClientResult<()>
-        where J: Serialize + Send + Sync,
-    {
-        self.request(Request::with_body(
-            Method::PUT,
-            route,
-            json,
-            || None,
-            |_| async { Ok(()) },
+            // NiceResponseJson::nice_json,
         )).await
     }
 
@@ -311,72 +278,63 @@ impl DiscordClient {
             Method::DELETE,
             route,
             || None,
-            |_| async { Ok(()) },
+            // |_| async { Ok(()) },
         )).await
     }
 }
 
-pub(crate) struct Request<Q, J, F, R, Fut, T>
+pub(crate) struct Request<Q, J, F>
     where
         F: Fn() -> Option<multipart::Form>,
-        R: Fn(Response) -> Fut,
-        Fut: Future<Output=ClientResult<T>>
+        // R: Fn(Response) -> Fut,
+        // Fut: Future<Output=ClientResult<T>>
 {
     method: Method,
     route: Route,
     query: Option<Q>,
     body: Option<J>,
     multipart: F,
-    getter: R,
+    // getter: R,
 }
 
-impl<F, R, Fut, T> Request<SerializeNever, SerializeNever, F, R, Fut, T> where
+impl<F> Request<SerializeNever, SerializeNever, F> where
     F: Fn() -> Option<multipart::Form>,
-    R: Fn(Response) -> Fut,
-    Fut: Future<Output=ClientResult<T>>
 {
-    fn new(method: Method, route: Route, multipart: F, getter: R) -> Self {
+    fn new(method: Method, route: Route, multipart: F) -> Self {
         Self {
             method,
             route,
             query: None,
             body: None,
             multipart,
-            getter,
         }
     }
 }
 
-impl<J, F, R, Fut, T> Request<SerializeNever, J, F, R, Fut, T> where
+impl<J, F> Request<SerializeNever, J, F> where
     F: Fn() -> Option<multipart::Form>,
-    R: Fn(Response) -> Fut,
-    Fut: Future<Output=ClientResult<T>>
 {
-    fn with_body(method: Method, route: Route, body: J, multipart: F, getter: R) -> Self {
+    fn with_body(method: Method, route: Route, body: J, multipart: F) -> Self {
         Self {
             method,
             route,
             query: None,
             body: Some(body),
             multipart,
-            getter,
         }
     }
 }
 
-impl<Q, F, R, Fut, T> Request<Q, SerializeNever, F, R, Fut, T> where
+impl<Q, F> Request<Q, SerializeNever, F> where
     F: Fn() -> Option<multipart::Form>,
-    R: Fn(Response) -> Fut,
-    Fut: Future<Output=ClientResult<T>>
 {
-    fn with_query(method: Method, route: Route, query: Q, multipart: F, getter: R) -> Self {
+    fn with_query(method: Method, route: Route, query: Q, multipart: F) -> Self {
         Self {
             method,
             route,
             query: Some(query),
             body: None,
             multipart,
-            getter,
         }
     }
 }

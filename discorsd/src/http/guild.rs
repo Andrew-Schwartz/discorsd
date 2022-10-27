@@ -32,7 +32,7 @@ impl DiscordClient {
         user: UserId,
         role: RoleId,
     ) -> ClientResult<()> {
-        self.put_unit(AddGuildMemberRole(guild, user, role), Some("")).await
+        self.put(AddGuildMemberRole(guild, user, role), Some("")).await
     }
 
     /// Removes a role to a guild member.

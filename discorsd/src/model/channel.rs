@@ -201,6 +201,13 @@ impl Channel {
         }
     }
 
+    pub fn into_text(self) -> Option<TextChannel> {
+        match self {
+            Self::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+
     pub fn overwrites(&self) -> Option<&[Overwrite]> {
         match self {
             Self::Text(t) => Some(t.permission_overwrites.deref()),

@@ -11,24 +11,26 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
+use once_cell::sync::Lazy;
 use reqwest::{IntoUrl, Url};
 use reqwest::multipart::{Form, Part};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::BotState;
+use crate::commands::{ButtonCommand, InteractionMessage, InteractionResponse, MenuCommand};
 use crate::http::{ClientError, DiscordClient};
 use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;
 use crate::http::routes::Route::*;
 use crate::http::routes::Route;
-use crate::model::channel::{Channel, DmChannel, GroupDmChannel, AnnouncementChannel, TextChannel};
+use crate::model::channel::{AnnouncementChannel, Channel, DmChannel, GroupDmChannel, TextChannel};
+use crate::model::components::ActionRow;
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
 use crate::model::message::*;
 use crate::model::permissions::Permissions;
 use crate::model::user::User;
-use crate::model::components::ActionRow;
-use crate::commands::{ButtonCommand, MenuCommand};
 
 /// Channel related http requests
 impl DiscordClient {
@@ -111,7 +113,7 @@ impl DiscordClient {
         message: MessageId,
         emoji: E,
     ) -> ClientResult<()> {
-        self.put_unit(CreateReaction(channel, message, emoji.into()), "").await
+        self.put(CreateReaction(channel, message, emoji.into()), "").await
     }
 
     /// Delete a reaction the current user has made for the message.
@@ -169,7 +171,7 @@ impl DiscordClient {
     ///
     /// If the http request fails
     pub async fn trigger_typing(&self, channel: ChannelId) -> ClientResult<()> {
-        self.post_unit(TriggerTyping(channel), "").await
+        self.post(TriggerTyping(channel), "").await
     }
 
     /// Returns all pinned messages in the channel
@@ -189,7 +191,7 @@ impl DiscordClient {
     ///
     /// If the http request fails
     pub async fn add_pinned_message(&self, channel: ChannelId, message: MessageId) -> ClientResult<()> {
-        self.put_unit(PinMessage(channel, message), "").await
+        self.put(PinMessage(channel, message), "").await
     }
 
     /// Delete a pinned message in a channel. Requires the `MANAGE_MESSAGES` permission.
@@ -350,6 +352,18 @@ impl ChannelMessageId {
         let client = client.as_ref();
         client.delete_pinned_message(self.channel, self.message).await
     }
+
+    pub async fn reply<B, State, Msg>(&self, state: State, message: Msg) -> ClientResult<Message>
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>> + Send + Sync,
+              Msg: Into<CreateMessage> + Send + Sync,
+    {
+        let state = state.as_ref();
+        let mut message = message.into();
+        message.reply(self.message);
+        // todo check if this channel is in a guild
+        self.channel.send(state, message).await
+    }
 }
 
 impl Message {
@@ -403,6 +417,14 @@ impl Message {
     /// See [`ChannelMessageId::unpin`](ChannelMessageId)
     pub async fn unpin<Client: AsRef<DiscordClient> + Send>(&self, client: Client) -> ClientResult<()> {
         self.cmid().unpin(client).await
+    }
+
+    pub async fn reply<B, State, Msg>(&self, state: State, message: Msg) -> ClientResult<Message>
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>> + Send + Sync,
+              Msg: Into<CreateMessage> + Send + Sync,
+    {
+        self.cmid().reply(state, message).await
     }
 }
 
@@ -472,6 +494,8 @@ macro_rules! att_from {
             }
         }
         att_from!(ref $ty);
+
+        // impl From<$ty> for CreateMessage {}
     };
 }
 
@@ -551,9 +575,6 @@ pub struct CreateMessage {
     nonce: Option<u64>,
     /// true if this is a TTS message
     pub tts: bool,
-    /// the contents of the file being sent
-    #[serde(skip_serializing)]
-    pub files: HashSet<MessageAttachment>,
     /// embedded rich content
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub embeds: Vec<RichEmbed>,
@@ -566,10 +587,29 @@ pub struct CreateMessage {
     /// sent if the message contains components like buttons, action rows, or other interactive components
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub components: Vec<ActionRow>,
+    /// IDs of up to 3 stickers in the server to send in the message
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sticker_ids: Vec<StickerId>,
+    /// the contents of the file being sent
+    #[serde(skip_serializing)]
+    pub files: HashSet<MessageAttachment>,
+    // todo make sure this is working
+    pub attachments: Vec<AttachmentId>,
+    /// [MessageFlags] (only [MessageFlags::SUPPRESS_EMBEDS] can be set)
+    #[serde(skip_serializing_if = "MessageFlags::is_empty")]
+    pub flags: MessageFlags,
 }
 
-impl<S: Into<Cow<'static, str>>> From<S> for CreateMessage {
-    fn from(s: S) -> Self {
+impl From<&'static str> for CreateMessage {
+    fn from(s: &'static str) -> Self {
+        let mut msg = Self::default();
+        msg.content(s);
+        msg
+    }
+}
+
+impl From<String> for CreateMessage {
+    fn from(s: String) -> Self {
         let mut msg = Self::default();
         msg.content(s);
         msg
@@ -578,15 +618,29 @@ impl<S: Into<Cow<'static, str>>> From<S> for CreateMessage {
 
 impl From<RichEmbed> for CreateMessage {
     fn from(e: RichEmbed) -> Self {
-        Self { embeds: vec!(e), ..Default::default() }
+        Self { embeds: vec![e], ..Default::default() }
     }
 }
+
+// todo collections?
+// impl From<Vec<RichEmbed>> for CreateMessage {
+//     fn from(embeds: Vec<RichEmbed>) -> Self {
+//         Self { embeds, ..Default::default() }
+//     }
+// }
 
 impl From<MessageAttachment> for CreateMessage {
     fn from(att: MessageAttachment) -> Self {
         let mut msg = Self::default();
         msg.files.insert(att);
         msg
+    }
+}
+
+// todo make the macro that make this into MA also make this impl
+impl<'a> From<&'a Path> for CreateMessage {
+    fn from(path: &'a Path) -> Self {
+        MessageAttachment::from(path).into()
     }
 }
 
@@ -605,6 +659,12 @@ impl From<Message> for CreateMessage {
             allowed_mentions: None,
             message_reference: message.message_reference,
             components: vec![],
+            sticker_ids: message.sticker_items.into_iter().map(|s| s.id).collect(),
+            // todo just the ones that matter
+            flags: message.flags,
+            // todo
+            attachments: vec![],
+            // attachments: message.attachments.into_iter().map(|a| a.id).collect(),
         }
     }
 }
@@ -674,7 +734,7 @@ impl CreateMessage {
 
     /// Attach an image to this message. See [`MessageAttachment`] for details about what types impl
     /// `Into<MessageAttachment>`.
-    pub fn image<A: Into<MessageAttachment>>(&mut self, attachment: A) {
+    pub fn attachment<A: Into<MessageAttachment>>(&mut self, attachment: A) {
         self.files.insert(attachment.into());
     }
 
@@ -1030,8 +1090,9 @@ pub struct EditMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<Option<Cow<'static, str>>>,
     /// The new embed for the message.
+    // todo now an array
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub embed: Option<Option<RichEmbed>>,
+    pub embeds: Option<Vec<RichEmbed>>,
     /// Only [SUPPRESS_EMBEDS](MessageFlags::SUPPRESS_EMBEDS) can be set/unset, but trying to send
     /// other flags is not an error.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1051,16 +1112,16 @@ impl<S: Into<Cow<'static, str>>> From<S> for EditMessage {
 
 impl From<RichEmbed> for EditMessage {
     fn from(e: RichEmbed) -> Self {
-        Self { embed: Some(Some(e)), ..Default::default() }
+        Self { embeds: Some(vec!(e)), ..Default::default() }
     }
 }
 
 impl From<Message> for EditMessage {
-    fn from(mut message: Message) -> Self {
+    fn from(message: Message) -> Self {
         Self {
             content: Some(Some(message.content.into())),
-            embed: Some(message.embeds.pop().map(RichEmbed::from)),
-            flags: message.flags,
+            embeds: Some(message.embeds.into_iter().map(RichEmbed::from).collect()),
+            flags: (!message.flags.is_empty()).then_some(message.flags),
             // todo
             allowed_mentions: None,
         }
@@ -1110,32 +1171,50 @@ impl EditMessage {
     /// the current [embed](Self::embed) of this [`EditMessage`], for instance if this
     /// [`EditMessage`] was created with the impl `From<Message>` or `From<RichEmbed>`.
     pub fn embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) {
-        let embed = self.embed.as_mut()
-            .and_then(Option::take)
+        // todo
+        let embed = self.embeds.as_mut()
+            .and_then(Vec::pop)
             .unwrap_or_default();
-        self.embed = Some(Some(RichEmbed::build(embed, builder)));
+        self.embeds = Some(vec!(RichEmbed::build(embed, builder)));
     }
 
     /// Clear the embed of this message.
     pub fn clear_embed(&mut self) {
-        self.embed = Some(None);
+        self.embeds = Some(vec![]);
     }
 }
 
-pub(in super) trait MessageWithFiles: Serialize {
-    /// yeet the files out of `self`
-    fn take_files(&mut self) -> HashSet<MessageAttachment>;
+// todo put back when CLion understands the derive's again
+pub(in super) trait MessageWithFiles/*: Serialize*/ {
+    fn files(&mut self) -> Option<&mut HashSet<MessageAttachment>>;
+
+    fn embeds(&mut self) -> Option<&mut Vec<RichEmbed>>;
+
+    fn take_files(&mut self) -> HashSet<MessageAttachment> {
+        use std::mem::take;
+
+        let mut files = self.files().map(take).unwrap_or_default();
+        if let Some(embeds) = self.embeds() {
+            files.extend(embeds.into_iter()
+                .map(|e| &mut e.files)
+                .flat_map(take)
+            )
+        }
+        files
+    }
 
     /// true if content, embeds, etc are present
     fn has_other_content(&self) -> bool;
 }
 
+
 impl DiscordClient {
-    pub(in super) async fn send_message_with_files<M: MessageWithFiles + Send + Sync>(
+    // todo remove this serialize when MWF has it as a supertrait again
+    pub(in super) async fn send_message_with_files<T: DeserializeOwned, M: MessageWithFiles + Send + Sync + Serialize>(
         &self,
         route: Route,
         mut message: M,
-    ) -> ClientResult<Message> {
+    ) -> ClientResult<T> {
         let files = message.take_files();
         if files.is_empty() {
             self.post(route, message).await
@@ -1163,18 +1242,12 @@ impl DiscordClient {
 }
 
 impl MessageWithFiles for CreateMessage {
-    fn take_files(&mut self) -> HashSet<MessageAttachment> {
-        use std::mem;
-        let mut files = mem::take(&mut self.files);
-        // todo make sure this is still correct
-        files.extend(
-            self.embeds.iter_mut()
-                .flat_map(|e| mem::take(&mut e.files))
-        );
-        // if let Some(embed) = &mut self.embeds {
-        //     files.extend(mem::take(&mut embed.files));
-        // }
-        files
+    fn files(&mut self) -> Option<&mut HashSet<MessageAttachment>> {
+        Some(&mut self.files)
+    }
+
+    fn embeds(&mut self) -> Option<&mut Vec<RichEmbed>> {
+        Some(&mut self.embeds)
     }
 
     fn has_other_content(&self) -> bool {
@@ -1183,18 +1256,47 @@ impl MessageWithFiles for CreateMessage {
 }
 
 impl MessageWithFiles for WebhookMessage {
-    fn take_files(&mut self) -> HashSet<MessageAttachment> {
-        use std::mem;
-        let mut files = mem::take(&mut self.files);
-        files.extend(
-            self.embeds.iter_mut()
-                .map(|e| &mut e.files)
-                .flat_map(mem::take)
-        );
-        files
+    fn files(&mut self) -> Option<&mut HashSet<MessageAttachment>> {
+        Some(&mut self.files)
+    }
+
+    fn embeds(&mut self) -> Option<&mut Vec<RichEmbed>> {
+        Some(&mut self.embeds)
     }
 
     fn has_other_content(&self) -> bool {
         !self.content.is_empty() || !self.embeds.is_empty()
+    }
+}
+
+impl MessageWithFiles for InteractionResponse {
+    fn files(&mut self) -> Option<&mut HashSet<MessageAttachment>> {
+        match self {
+            InteractionResponse::Pong
+            | InteractionResponse::DeferredChannelMessageWithSource
+            | InteractionResponse::DeferredUpdateMessage => None,
+            InteractionResponse::ChannelMessageWithSource(m)
+            | InteractionResponse::UpdateMessage(m) => Some(&mut m.files),
+        }
+    }
+
+    fn embeds(&mut self) -> Option<&mut Vec<RichEmbed>> {
+        match self {
+            InteractionResponse::Pong
+            | InteractionResponse::DeferredChannelMessageWithSource
+            | InteractionResponse::DeferredUpdateMessage => None,
+            InteractionResponse::ChannelMessageWithSource(m)
+            | InteractionResponse::UpdateMessage(m) => Some(&mut m.embeds),
+        }
+    }
+
+    fn has_other_content(&self) -> bool {
+        match self {
+            InteractionResponse::Pong
+            | InteractionResponse::DeferredChannelMessageWithSource
+            | InteractionResponse::DeferredUpdateMessage => false,
+            InteractionResponse::ChannelMessageWithSource(m)
+            | InteractionResponse::UpdateMessage(m) => !m.content.is_empty() || !m.embeds.is_empty(),
+        }
     }
 }

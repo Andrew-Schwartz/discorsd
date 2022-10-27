@@ -3,6 +3,7 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use reqwest::header::HeaderMap;
+use tokio::time::Sleep;
 
 use crate::http::routes::Route;
 use crate::model::ids::*;
@@ -150,6 +151,19 @@ impl RateLimiter {
                 log::info!("{:?} ==> {}", key, rate_limit);
                 tokio::time::sleep(duration).await;
             }
+        }
+    }
+
+    pub fn get_rate_limit(&self, key: &BucketKey) -> Option<Sleep> {
+        if let Some(rate_limit) = self.0.get(key) {
+            if let Some(duration) = rate_limit.limit() {
+                log::info!("{:?} ==> {}", key, rate_limit);
+                Some(tokio::time::sleep(duration))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 

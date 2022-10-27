@@ -98,8 +98,8 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_reference: Option<MessageReference>,
     /// message flags combined as a bitfield
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub flags: Option<MessageFlags>,
+    #[serde(default, skip_serializing_if = "MessageFlags::is_empty")]
+    pub flags: MessageFlags,
     // todo given what this documentation says, maybe should be `Option<Option<Message>>`?
     /// the message associated with the [message_reference](Message::message_reference)
     ///
