@@ -145,14 +145,14 @@ impl From<&Route> for BucketKey {
 pub struct RateLimiter(HashMap<BucketKey, RateLimit>);
 
 impl RateLimiter {
-    pub async fn rate_limit(&self, key: &BucketKey) {
-        if let Some(rate_limit) = self.0.get(key) {
-            if let Some(duration) = rate_limit.limit() {
-                log::info!("{:?} ==> {}", key, rate_limit);
-                tokio::time::sleep(duration).await;
-            }
-        }
-    }
+    // pub async fn rate_limit(&self, key: &BucketKey) {
+    //     if let Some(rate_limit) = self.0.get(key) {
+    //         if let Some(duration) = rate_limit.limit() {
+    //             log::info!("{:?} ==> {}", key, rate_limit);
+    //             tokio::time::sleep(duration).await;
+    //         }
+    //     }
+    // }
 
     pub fn get_rate_limit(&self, key: &BucketKey) -> Option<Sleep> {
         if let Some(rate_limit) = self.0.get(key) {

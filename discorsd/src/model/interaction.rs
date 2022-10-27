@@ -1818,40 +1818,15 @@ impl InteractionMessage {
         Self::build_with(Self::default(), builder)
     }
 
-    pub fn embeds<F: FnMut(usize, &mut RichEmbed)>(&mut self, n: usize, mut builder: F) {
-        if self.embeds.len() + n > 10 {
-            panic!("can't send more than 10 embeds");
-        } else {
-            self.embeds.extend(
-                (0..n).map(|i| embed(|e| builder(i, e)))
-            );
-        }
-    }
-
     /// Add an embed to this [InteractionMessage](InteractionMessage).
     ///
     /// # Panics
     ///
     /// If this message already has 10 or more embeds. See also [`try_embed`](Self::try_embed).
     pub fn embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) {
-        if self.embeds.len() >= 10 {
-            panic!("can't send more than 10 embeds");
-        } else {
-            self.embeds.push(embed(builder));
-        }
-    }
-
-    /// Add an embed to the [InteractionMessage](InteractionMessage)
-    ///
-    /// # Panics
-    ///
-    /// If this message already has 10 or more embeds.
-    pub fn embed_with<F: FnOnce(&mut RichEmbed)>(&mut self, embed: RichEmbed, builder: F) {
-        if self.embeds.len() >= 10 {
-            panic!("can't send more than 10 embeds");
-        } else {
-            self.embeds.push(embed.build(builder));
-        }
+        self.try_embed(builder)
+            .map_err(|_| "can't send more than 10 embeds")
+            .unwrap()
     }
 
     /// Add an embed to the [InteractionMessage](InteractionMessage).

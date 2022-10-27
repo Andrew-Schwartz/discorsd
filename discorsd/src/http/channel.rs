@@ -11,14 +11,13 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use once_cell::sync::Lazy;
 use reqwest::{IntoUrl, Url};
 use reqwest::multipart::{Form, Part};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, InteractionMessage, InteractionResponse, MenuCommand};
+use crate::commands::{ButtonCommand, InteractionResponse, MenuCommand};
 use crate::http::{ClientError, DiscordClient};
 use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;
@@ -717,19 +716,30 @@ impl CreateMessage {
         self.content = content.into();
     }
 
-    /// Build a [`RichEmbed`] and attach it to this message.
+    /// Add an embed to this [CreateMessage](CreateMessage).
+    ///
+    /// # Panics
+    ///
+    /// If this message already has 10 or more embeds. See also [`try_embed`](Self::try_embed).
     pub fn embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) {
-        // todo is this still correct
-        let embed = self.embeds.pop().unwrap_or_default();
-        self.embed_with(embed, builder);
+        self.try_embed(builder)
+            .map_err(|_| "can't send more than 10 embeds")
+            .unwrap()
     }
 
-    /// Build a [`RichEmbed`] by modifying an already existing `RichEmbed` and attach it to this
-    /// message.
-    pub fn embed_with<F: FnOnce(&mut RichEmbed)>(&mut self, embed: RichEmbed, builder: F) {
-        // todo is this still correct
-        self.embeds.push(embed.build(builder));
-        // self.embeds = Some(RichEmbed::build(embed, builder));
+    /// Add an embed to the [CreateMessage](CreateMessage).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(builder)` if this message already has 10 or more embeds. See also
+    /// [embed](Self::embed).
+    pub fn try_embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) -> Result<(), F> {
+        if self.embeds.len() >= 10 {
+            Err(builder)
+        } else {
+            self.embeds.push(embed(builder));
+            Ok(())
+        }
     }
 
     /// Attach an image to this message. See [`MessageAttachment`] for details about what types impl

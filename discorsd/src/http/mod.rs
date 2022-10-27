@@ -10,7 +10,7 @@ use std::time::Duration;
 use async_tungstenite::tungstenite::http::StatusCode;
 use backoff::ExponentialBackoff;
 use log::{error, warn};
-use reqwest::{Client, Method, multipart, Response};
+use reqwest::{Client, Method, multipart};
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::de::DeserializeOwned;
 use serde::Serialize;

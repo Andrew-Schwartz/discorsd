@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use reqwest::Method;
 use serde::Serialize;
 
 use crate::commands::{CommandPermissions, GuildApplicationCommandPermission, GuildCommandPermissions};
