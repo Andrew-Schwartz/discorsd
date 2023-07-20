@@ -18,7 +18,10 @@ pub use crate::model::commands::*;
 use crate::model::components::{ButtonStyle, SelectOption};
 use crate::model::emoji::Emoji;
 use crate::model::ids::{CommandId, GuildId};
-pub use crate::model::interaction::*;
+use crate::model::interaction_response::ephemeral;
+use crate::model::new_command;
+use crate::model::new_command::Command;
+use crate::model::new_interaction::{ApplicationCommandData, InteractionData, InteractionOption};
 use crate::shard::dispatch::ReactionUpdate;
 
 /// The trait to implement to define a Slash Command.
@@ -88,7 +91,7 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     /// Most of the time, this will be [`Used`](Used), meaning the [`run`](Self::run) method
     /// responded to and/or deleted the interaction. Alternatively, this can be
     /// [`Deferred`](Deferred) if the [`run`](Self::run) method only
-    /// [`defer`](InteractionUse::<Unused>::defer)s the interaction, to automatically delete the
+    /// [`defer`](InteractionUse::<Data,Unused>::defer)s the interaction, to automatically delete the
     /// interaction after the [`run`](Self::run) method finishes.
     // todo this probably is not worth it
     type Use: NotUnused + Send;
@@ -110,8 +113,8 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     /// of [`CommandData::make_args`](CommandData::make_args), but can be overridden. Note: if you
     /// override this method, you *MUST* ensure that the command structure is compatible with/can be
     /// deserialized into [`Data`](Self::Data).
-    fn options(&self) -> TopLevelOption {
-        <Self::Data as CommandData<Self>>::VecArg::tlo_ctor()(Self::Data::make_args(self))
+    fn options(&self) -> Vec<new_command::CommandOption> {
+        <Self::Data as CommandData<Self>>::VecArg::wrap(Self::Data::make_args(self))
     }
 
     /// This method is called every time this command is invoked, and must suitably use the
@@ -125,7 +128,7 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
 
 #[allow(clippy::use_self)]
 #[async_trait]
-impl<Scd: SlashCommand> SlashCommandRaw for Scd
+impl<SC: SlashCommand> SlashCommandRaw for SC
     where InteractionUse<SlashCommandData, <Self as SlashCommand>::Use>: FinalizeInteraction<SlashCommandData>
 {
     type Bot = <Self as SlashCommand>::Bot;
@@ -139,14 +142,14 @@ impl<Scd: SlashCommand> SlashCommandRaw for Scd
             Self::NAME,
             self.description(),
             self.options(),
-            self.default_permissions(),
+            // self.default_permissions(),
         )
     }
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<SlashCommandData, Unused>,
-                 data: InteractionDataOption,
+                 data: InteractionOption,
     ) -> Result<InteractionUse<SlashCommandData, Used>, BotError> {
         match <<Self as SlashCommand>::Data as CommandData<Self>>::Options::from_data_option(data) {
             Ok(options) => match <Self as SlashCommand>::Data::from_options(options) {
@@ -206,7 +209,7 @@ pub trait SlashCommandRaw: Send + Sync + Debug + Downcast + DynClone {
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<SlashCommandData, Unused>,
-                 data: InteractionDataOption,
+                 data: InteractionOption,
     ) -> Result<InteractionUse<SlashCommandData, Used>, BotError>;
 }
 impl_downcast!(SlashCommandRaw assoc Bot);
@@ -241,22 +244,29 @@ pub trait SlashCommandExt: SlashCommandRaw {
         state: State,
         guild: GuildId,
         command: CommandId,
-    ) -> ClientResult<ApplicationCommand>
+    ) -> ClientResult<InteractionData<ApplicationCommandData>>
         where
             State: AsRef<BotState<B>> + Send,
             B: Send + Sync + 'static
     {
-        let Command { description, options, default_permission, .. } = self.command();
-        let state = state.as_ref();
-        state.client.edit_guild_command(
-            state.application_id(),
-            guild,
-            command,
-            None,
-            Some(description.as_ref()),
-            Some(options),
-            Some(default_permission),
-        ).await
+        match self.command() {
+            Command::SlashCommand { name, name_localizations, description, description_localizations, options } => {
+                let state = state.as_ref();
+                state.client.edit_guild_command(
+                    state.application_id(),
+                    guild,
+                    command,
+                    None,
+                    Some(description.as_ref()),
+                    Some(options),
+                    // todo
+                    None,
+                    // Some(default_permission),
+                ).await
+            }
+            Command::UserCommand { .. } => unreachable!(),
+            Command::MessageCommand { .. } => unreachable!(),
+        }
     }
 }
 

@@ -101,7 +101,6 @@ impl<'a> TryFrom<RawPayload<'a>> for Payload {
         match op {
             0 => {
                 // guaranteed to be present in dispatch events
-                // it worked in kotlin for over a year, so I think we're good
                 let s = s.unwrap();
                 let t = t.unwrap();
 
@@ -109,7 +108,7 @@ impl<'a> TryFrom<RawPayload<'a>> for Payload {
 
                 match nice_from_str(&json) {
                     Ok(event) => Ok(Self::Dispatch { event, seq_num: s }),
-                    Err(e) => Err(e)
+                    Err(e) => Err(e),
                 }
             }
             1 => {

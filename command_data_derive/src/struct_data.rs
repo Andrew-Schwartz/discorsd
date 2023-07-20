@@ -28,7 +28,7 @@ pub fn struct_impl(ty: &Ident, generics: Vec<TypeParam>, fields: Fields, attribu
     let tokens = quote! {
         #command_data_impl for #generic_ty {
             // all structs are built from a Vec<ValueOption>
-            type Options = ::std::vec::Vec<::discorsd::model::interaction::ValueOption>;
+            type Options = ::std::vec::Vec<::discorsd::model::new_interaction::InteractionDataOption>;
 
             fn from_options(
                 options: Self::Options,
@@ -37,13 +37,14 @@ pub fn struct_impl(ty: &Ident, generics: Vec<TypeParam>, fields: Fields, attribu
             }
 
             // all structs are DataOptions
-            type VecArg = ::discorsd::commands::DataOption;
+            type VecArg = ::discorsd::model::new_command::CommandDataOption;
 
             fn make_args(command: &#command_type) -> Vec<Self::VecArg> {
                 #data_options
             }
 
-            type Choice = Self;
+            type Choice = ::std::convert::Infallible;
+            type ChoicePrimitive = ::std::convert::Infallible;
         }
     };
     tokens
@@ -128,6 +129,7 @@ pub struct UnnamedField {
     index: Index,
     // todo presumably rename
     //  NO THAT WOULDN'T MAKE SENSE FOR AN UNNAMED FIELD IF YOU THINK ABOUT IT
+    //  oh wow that was passionate. couldn't it? I'm thinking about it & I feel like it could
 }
 
 #[derive(Debug, Default)]
@@ -228,7 +230,8 @@ impl VarargNames {
             VarargNames::Ordinals => {
                 let ordinals = Self::ordinals_array();
                 quote! {
-                    ::std::array::IntoIter::new(#ordinals)
+                    // ::std::array::IntoIter::new(#ordinals)
+                    #ordinals.into_iter()
                 }
             }
             VarargNames::Function(fun) => quote! {
@@ -378,7 +381,7 @@ impl Struct {
                 while let ::std::option::Option::Some(option) = options.next() {
                     // this first ^ option is always a single option or the first of a vararg
                     let matches_vararg = VARARGS[idx];
-                    if matches_vararg(&option.name, 1) {
+                    if matches_vararg(option.name(), 1) {
                         // start of a vararg
                         let mut varargs = vec![option];
                         let mut vararg_idx = 1;
@@ -387,7 +390,7 @@ impl Struct {
                                 options.peek(),
                                 ::std::option::Option::Some(next) if {
                                     vararg_idx += 1;
-                                    matches_vararg(&next.name, vararg_idx)
+                                    matches_vararg(&next.name(), vararg_idx)
                                 }
                             );
                             if next_is_vararg {
@@ -434,11 +437,11 @@ impl Struct {
             let ty = &f.ty;
             if f.vararg.is_some() {
                 quote_spanned! { ty.span() =>
-                    #i => return ::std::result::Result::Err(CommandParseError::UnexpectedVararg(option.name, idx))
+                    #i => return ::std::result::Result::Err(CommandParseError::UnexpectedVararg(option.name().to_string(), idx))
                 }
             } else {
                 quote_spanned! { ty.span() =>
-                    #i => if option.name == fields[#i] {
+                    #i => if option.name() == fields[#i] {
                         builder.#builder_ident = ::std::option::Option::Some(
                             <#ty as ::discorsd::commands::CommandData<#command_ty>>::from_options(option)?
                         );
@@ -451,7 +454,7 @@ impl Struct {
         quote! {
             match idx {
                 #(#branches,)*
-                #num_fields => return ::std::result::Result::Err(CommandParseError::BadOrder(option.name, idx, 0..#num_fields)),
+                #num_fields => return ::std::result::Result::Err(CommandParseError::BadOrder(option.name().to_string(), idx, 0..#num_fields)),
                 _ => {}
             }
         }
@@ -639,16 +642,16 @@ impl Field {
         };
         let required = if let Some(less_than) = required_if_i_less_than {
             quote! {
-                if i < #less_than { option = option.required() }
+                if i < #less_than { option.extra_data.required = true; }
             }
         } else if self.default.is_none() {
             quote! {
-                option = option.required();
+                option.extra_data.required = true;
             }
         } else if let Some(required) = &self.required {
             quote! {
                 if #required(command) {
-                    option = option.required();
+                    option.extra_data.required = true;
                 }
             }
         } else {
@@ -658,6 +661,7 @@ impl Field {
         let ty = self.ty.generic_type()
             .or_else(|| self.ty.array_type())
             .unwrap_or(&self.ty);
+        // todo the retain function probably needs to have different args now I bet
         let retain = if let Some(path) = &self.retain {
             quote_spanned! { path.span() =>
                 // all choices are `Copy`
@@ -666,26 +670,40 @@ impl Field {
         } else {
             TokenStream2::new()
         };
-        quote_spanned! { self.name.span() =>
+        quote! {
             {
                 #let_name_desc
                 #[allow(unused_mut)]
+                let mut option = ::discorsd::model::new_command::OptionData::<
+                    <#ty as ::discorsd::commands::OptionCtor>::Data
+                >::new(name, desc);
+                #required
                 let mut choices = <#ty as ::discorsd::commands::CommandData<#command_type>>::make_choices();
                 #retain
-                if choices.is_empty() {
-                    #[allow(unused_mut)]
-                    let mut option = ::discorsd::commands::CommandDataOption::new(name, desc);
-                    #required
-                    <#ty as ::discorsd::commands::OptionCtor>::option_ctor(option)
-                } else {
-                    #[allow(unused_mut)]
-                    let mut option = ::discorsd::commands::CommandDataOption::new_str(name, desc)
-                                        .choices(choices.into_iter().map(<#ty as ::discorsd::commands::CommandData<#command_type>>::into_command_choice).collect());
-                    #required
-                    ::discorsd::commands::DataOption::String(option)
-                }
+                option.set_choices::<_, #command_type>(choices);
+                <#ty as ::discorsd::commands::OptionCtor>::option_ctor(option)
             }
         }
+        // quote_spanned! { self.name.span() =>
+        //     {
+        //         #let_name_desc
+        //         #[allow(unused_mut)]
+        //         let mut choices = <#ty as ::discorsd::commands::CommandData<#command_type>>::make_choices();
+        //         #retain
+        //         if choices.is_empty() {
+        //             #[allow(unused_mut)]
+        //             let mut option = ::discorsd::commands::CommandDataOption::new(name, desc);
+        //             #required
+        //             <#ty as ::discorsd::commands::OptionCtor>::option_ctor(option)
+        //         } else {
+        //             #[allow(unused_mut)]
+        //             let mut option = ::discorsd::commands::CommandDataOption::new_str(name, desc)
+        //                                 .choices(choices.into_iter().map(<#ty as ::discorsd::commands::CommandData<#command_type>>::into_command_choice).collect());
+        //             #required
+        //             ::discorsd::commands::DataOption::String(option)
+        //         }
+        //     }
+        // }
     }
 
     fn vararg_option(&self, vararg: &Vararg, command_type: &TokenStream2) -> TokenStream2 {

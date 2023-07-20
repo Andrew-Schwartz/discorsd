@@ -1,189 +1,80 @@
-use std::convert::TryFrom;
 use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
-use itertools::Itertools;
-use num_enum::TryFromPrimitive;
-use serde::{de, Deserialize, Serialize, Serializer};
-use serde::de::Unexpected;
-use serde::ser::SerializeStruct;
-use serde_json::value::RawValue;
+use serde::{Deserialize, Serialize};
 
 use crate::model::ids::*;
 pub use crate::model::ids::ChannelId;
 use crate::model::permissions::Permissions;
 use crate::model::user::User;
 use crate::model::voice::VoiceRegion;
-use crate::serde_utils::nice_from_str;
 
-// todo why doesn't this just go to a big ol struct so I don't have to do that cursed channel_type
-// This can be gotten rid of once serde can ser/de an enum tagged by an int
-#[derive(Deserialize)]
-struct RawChannel<'a>(#[serde(borrow)] &'a RawValue);
-
-impl<'a> RawChannel<'a> {
-    // I'm so surprised this has worked perfectly so far lmao (from 2/12/2021, method from (1/1/2021)
-    // 04/28/2021: Had to make it handle spaces after `:`
-    // 10/11/2022: Made it return a int to handle 2 digit channel types
-    fn channel_type(&self) -> Result<u32, ()> {
-        // we want to be one level in the object
-        let mut nesting = 0;
-        // index in `"type":` we are at rn
-        //           0123456
-        let mut progress = 0;
-        let str = self.0.get();
-        let idx = str.find(|c: char| {
-            match c {
-                '{' => {
-                    progress = 0;
-                    nesting += 1
-                }
-                '}' => {
-                    progress = 0;
-                    nesting -= 1
-                }
-                '"' if nesting == 1 && progress == 0 => progress += 1,
-                't' if nesting == 1 && progress == 1 => progress += 1,
-                'y' if nesting == 1 && progress == 2 => progress += 1,
-                'p' if nesting == 1 && progress == 3 => progress += 1,
-                'e' if nesting == 1 && progress == 4 => progress += 1,
-                '"' if nesting == 1 && progress == 5 => progress += 1,
-                ':' if nesting == 1 && progress == 6 => progress += 1,
-                ' ' if nesting == 1 && progress == 7 => {}
-                c if nesting == 1 && progress == 7 && c.is_numeric() => {}
-                _ => progress = 0,
-            }
-            progress == 7 && c.is_numeric()
-        }).ok_or(())?;
-
-        let num = str.chars()
-            .skip(idx)
-            .take_while(|c| c.is_numeric())
-            .join("")
-            .parse()
-            .unwrap();
-        Ok(num)
+serde_num_tag! {
+    /// Represents a guild or DM channel within Discord.
+    #[derive(Debug, Clone)]
+    pub enum Channel = "type": u8 as ChannelType {
+        /// a text channel within a server
+        (0) = Text(TextChannel),
+        /// a direct message between users
+        (1) = Dm(DmChannel),
+        /// a voice channel within a server
+        (2) = Voice(VoiceChannel),
+        /// a direct message between multiple users
+        (3) = GroupDm(GroupDmChannel),
+        /// an [organizational category](https://support.discord.com/hc/en-us/articles/115001580171-Channel-Categories-101)
+        /// that contains up to 50 channels
+        (4) = Category(CategoryChannel),
+        /// a channel that [users can follow and crosspost into their own server](https://support.discord.com/hc/en-us/articles/360032008192)
+        (5) = Announcement(AnnouncementChannel),
+        // /// a channel in which game developers can
+        // /// [sell their game on Discord](https://discord.com/developers/docs/game-and-server-management/special-channels)
+        // Store(StoreChannel),
+        /// a temporary sub-channel within a GUILD_ANNOUNCEMENT channel
+        (10) = AnnouncementThread(Thread),
+        /// a temporary sub-channel within a GUILD_TEXT channel
+        (11) = PublicThread(Thread),
+        /// a temporary sub-channel within a GUILD_TEXT channel that is only viewable by those invited and those with the MANAGE_THREADS permission
+        (12) = PrivateThread(Thread),
+        /// a voice channel for hosting events with an audience
+        (13) = GuildStageVoice(GuildStageVoice),
+        /// the channel in a hub containing the listed servers
+        (14) = GuildDirectory(GuildDirectory),
+        /// Channel that can only contain threads
+        (15) = GuildForum(GuildForum),
     }
 }
 
-impl<'a> TryFrom<RawChannel<'a>> for Channel {
-    type Error = crate::serde_utils::Error;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    fn try_from(raw: RawChannel<'a>) -> Result<Self, Self::Error> {
-        let channel_type = raw.channel_type()
-            .map_err(|_| de::Error::missing_field("type"))?;
-        #[allow(clippy::map_err_ignore, clippy::cast_possible_truncation, clippy::cast_lossless)]
-            let channel_type = ChannelType::try_from(channel_type as u8)
-            .map_err(|_| de::Error::invalid_value(Unexpected::Unsigned(channel_type as _), &"0..=6"))?;
-
-        let raw = raw.0.get();
-        Ok(match channel_type {
-            ChannelType::GuildText => Self::Text(nice_from_str(raw)?),
-            ChannelType::Dm => Self::Dm(nice_from_str(raw)?),
-            ChannelType::GuildVoice => Self::Voice(nice_from_str(raw)?),
-            ChannelType::GroupDm => Self::GroupDm(nice_from_str(raw)?),
-            ChannelType::GuildCategory => Self::Category(nice_from_str(raw)?),
-            ChannelType::GuildAnnouncement => Self::Announcement(nice_from_str(raw)?),
-            // ChannelType::GuildStore => Self::Store(nice_from_str(raw.0.get())?),
-            ChannelType::AnnouncementThread => Self::AnnouncementThread(nice_from_str(raw)?),
-            ChannelType::PublicThread => Self::PublicThread(nice_from_str(raw)?),
-            ChannelType::PrivateThread => Self::PrivateThread(nice_from_str(raw)?),
-            ChannelType::GuildStageVoice => Self::GuildStageVoice(nice_from_str(raw)?),
-            ChannelType::GuildDirectory => Self::GuildDirectory(nice_from_str(raw)?),
-            ChannelType::GuildForum => Self::GuildForum(nice_from_str(raw)?),
-        })
-    }
-}
-
-impl Serialize for Channel {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        #[derive(Serialize)]
-        struct Shim<'a, C> {
-            #[serde(flatten)]
-            channel: &'a C,
-            #[serde(rename = "type")]
-            t: u8,
-        }
-
-        match self {
-            Self::Text(channel) => Shim { channel, t: 0 }.serialize(s),
-            Self::Dm(channel) => Shim { channel, t: 1 }.serialize(s),
-            Self::Voice(channel) => Shim { channel, t: 2 }.serialize(s),
-            Self::GroupDm(channel) => Shim { channel, t: 3 }.serialize(s),
-            Self::Category(channel) => Shim { channel, t: 4 }.serialize(s),
-            Self::Announcement(channel) => Shim { channel, t: 5 }.serialize(s),
-            // Self::Store(store) => Shim { channel: store, t: 6 }.serialize(s),
-            Self::AnnouncementThread(channel) => Shim { channel, t: 10 }.serialize(s),
-            Self::PublicThread(channel) => Shim { channel, t: 11 }.serialize(s),
-            Self::PrivateThread(channel) => Shim { channel, t: 12 }.serialize(s),
-            Self::GuildStageVoice(channel) => Shim { channel, t: 13 }.serialize(s),
-            Self::GuildDirectory(channel) => Shim { channel, t: 14 }.serialize(s),
-            Self::GuildForum(channel) => Shim { channel, t: 15 }.serialize(s),
+    fn test(json: &'static str) -> Channel {
+        match serde_json::from_str(json) {
+            Ok(channel) => channel,
+            Err(e) => panic!("{e}"),
         }
     }
-}
 
-/// Represents a guild or DM channel within Discord.
-#[derive(Deserialize, Debug, Clone)]
-#[serde(try_from = "RawChannel")]
-pub enum Channel {
-    /// a text channel within a server
-    Text(TextChannel),
-    /// a direct message between users
-    Dm(DmChannel),
-    /// a voice channel within a server
-    Voice(VoiceChannel),
-    /// a direct message between multiple users
-    GroupDm(GroupDmChannel),
-    /// an [organizational category](https://support.discord.com/hc/en-us/articles/115001580171-Channel-Categories-101)
-    /// that contains up to 50 channels
-    Category(CategoryChannel),
-    /// a channel that [users can follow and crosspost into their own server](https://support.discord.com/hc/en-us/articles/360032008192)
-    Announcement(AnnouncementChannel),
-    // /// a channel in which game developers can
-    // /// [sell their game on Discord](https://discord.com/developers/docs/game-and-server-management/special-channels)
-    // Store(StoreChannel),
-    /// Any of the thread types
-    /// a temporary sub-channel within a GUILD_ANNOUNCEMENT channel
-    AnnouncementThread(Thread),
-    /// a temporary sub-channel within a GUILD_TEXT channel
-    PublicThread(Thread),
-    /// a temporary sub-channel within a GUILD_TEXT channel that is only viewable by those invited and those with the MANAGE_THREADS permission
-    PrivateThread(Thread),
-    /// a voice channel for hosting events with an audience
-    GuildStageVoice(GuildStageVoice),
-    /// the channel in a hub containing the listed servers
-    GuildDirectory(GuildDirectory),
-    /// Channel that can only contain threads
-    GuildForum(GuildForum),
+    #[test]
+    fn text_channels_category() {
+        const JSON: &str = r#"{"version": 0,"type": 4,"position": 0,"permission_overwrites": [],"name": "Text Channels","id": "492122906864779275","flags": 0}"#;
+        println!("channel = {:?}", test(JSON));
+    }
+    
+    #[test]
+    fn general_text() {
+        const JSON: &str = r#"{"version":0,"type":0,"topic":null,"rate_limit_per_user":0,"position":0,"permission_overwrites":[{"type":0,"id":"492122906864779274","deny":"0","allow":"0"}],"parent_id":"492122906864779275","name":"general","last_message_id":"991036430912454696","id":"492122906864779276","flags":0}"#;
+        println!("channel = {:?}", test(JSON));
+    }
 }
 
 impl Channel {
-    pub const fn channel_type(&self) -> ChannelType {
-        match self {
-            Self::Text(_) => ChannelType::GuildText,
-            Self::Dm(_) => ChannelType::Dm,
-            Self::Voice(_) => ChannelType::GuildVoice,
-            Self::GroupDm(_) => ChannelType::GroupDm,
-            Self::Category(_) => ChannelType::GuildCategory,
-            Self::Announcement(_) => ChannelType::GuildAnnouncement,
-            // Self::Store(_) => ChannelType::GuildStore,
-            Self::AnnouncementThread(_) => ChannelType::AnnouncementThread,
-            Self::PublicThread(_) => ChannelType::PublicThread,
-            Self::PrivateThread(_) => ChannelType::PrivateThread,
-            Self::GuildStageVoice(_) => ChannelType::GuildStageVoice,
-            Self::GuildDirectory(_) => ChannelType::GuildDirectory,
-            Self::GuildForum(_) => ChannelType::GuildForum,
-        }
-    }
-
     pub const fn guild_id(&self) -> Option<GuildId> {
         match self {
             Self::Text(t) => t.guild_id,
             Self::Voice(v) => v.guild_id,
             Self::Category(c) => c.guild_id,
             Self::Announcement(n) => n.guild_id,
-            // Self::Store(s) => s.guild_id,
             Self::Dm(_) | Self::GroupDm(_) => None,
             Self::AnnouncementThread(a) => a.guild_id,
             Self::PublicThread(t) => t.guild_id,
@@ -645,40 +536,6 @@ serde_repr! {
     }
 }
 
-serde_repr! {
-    #[derive(TryFromPrimitive)]
-    pub enum ChannelType: u8 {
-        /// a text channel within a server
-        GuildText = 0,
-        /// a direct message between users
-        Dm = 1,
-        /// a voice channel within a server
-        GuildVoice = 2,
-        /// a direct message between multiple users
-        GroupDm = 3,
-        /// an [organizational category](https://support.discord.com/hc/en-us/articles/115001580171-Channel-Categories-101)
-        /// that contains up to 50 channels
-        GuildCategory = 4,
-        /// a channel that [users can follow and crosspost into their own server](https://support.discord.com/hc/en-us/articles/360032008192)
-        GuildAnnouncement = 5,
-        // /// a channel in which game developers can
-        // /// [sell their game on Discord](https://discord.com/developers/docs/game-and-server-management/special-channels)
-        // GuildStore = 6,
-        /// a temporary sub-channel within a GUILD_ANNOUNCEMENT channel
-		AnnouncementThread = 10,
-		/// a temporary sub-channel within a GUILD_TEXT channel
-		PublicThread = 11,
-		/// a temporary sub-channel within a GUILD_TEXT channel that is only viewable by those invited and those with the MANAGE_THREADS permission
-		PrivateThread = 12,
-		/// a voice channel for hosting events with an audience
-		GuildStageVoice = 13,
-		/// the channel in a hub containing the listed servers
-		GuildDirectory = 14,
-		/// Channel that can only contain threads
-		GuildForum = 15,
-    }
-}
-
 /// a voice channel within a server
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct GuildStageVoice {
@@ -817,72 +674,33 @@ pub trait ChannelMarkupExt: Id<Id=ChannelId> {
 
 impl<I: Id<Id=ChannelId>> ChannelMarkupExt for I {}
 
-/// See [permissions](https://discord.com/developers/docs/topics/permissions#permissions)
-/// for more information about the `allow` and `deny` fields.
-#[derive(Deserialize, Debug, Clone)]
-#[serde(try_from = "RawOverwrite")]
-pub struct Overwrite {
-    /// role or user id
-    pub id: OverwriteType,
-    /// permission bit set
-    pub allow: Permissions,
-    /// permission bit set
-    pub deny: Permissions,
-}
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+// // #[serde(try_from = "RawOverwrite")]
+// pub struct Overwrite {
+//     /// role or user id
+//     // #[serde(flatten)]
+//     pub rm_id: OverwriteType,
+//     /// permission bit set
+//     pub allow: Permissions,
+//     /// permission bit set
+//     pub deny: Permissions,
+// }
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
-pub enum OverwriteType {
-    Role(RoleId),
-    Member(UserId),
-}
-
-impl Serialize for Overwrite {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut overwrite = s.serialize_struct("Overwrite", 4)?;
-        match self.id {
-            OverwriteType::Role(id) => {
-                overwrite.serialize_field("id", &id)?;
-                overwrite.serialize_field("type", &0)?;
-            }
-            OverwriteType::Member(id) => {
-                overwrite.serialize_field("id", &id)?;
-                overwrite.serialize_field("type", &1)?;
-            }
+serde_num_tag! {
+    /// See [permissions](https://discord.com/developers/docs/topics/permissions#permissions)
+    /// for more information about the `allow` and `deny` fields.
+    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+    pub enum Overwrite = "type": u8 as OverwriteType {
+        (0) = Role {
+            id: RoleId,
+            allow: Permissions,
+            deny: Permissions,
+        },
+        (1) = Member {
+            id: UserId,
+            allow: Permissions,
+            deny: Permissions,
         }
-        overwrite.serialize_field("allow", &self.allow)?;
-        overwrite.serialize_field("deny", &self.deny)?;
-        overwrite.end()
-    }
-}
-
-// Exists to mediate deserialization to Overwrite
-#[derive(Deserialize)]
-struct RawOverwrite<'a> {
-    #[serde(rename = "type")]
-    otype: u8,
-    #[serde(borrow)]
-    id: &'a RawValue,
-    allow: Permissions,
-    deny: Permissions,
-}
-
-impl<'a> TryFrom<RawOverwrite<'a>> for Overwrite {
-    type Error = crate::serde_utils::Error;
-
-    fn try_from(RawOverwrite { otype, id, allow, deny }: RawOverwrite<'a>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            id: match otype {
-                0 => {
-                    OverwriteType::Role(nice_from_str(id.get())?)
-                }
-                1 => {
-                    OverwriteType::Member(nice_from_str(id.get())?)
-                }
-                _ => return Err(de::Error::custom("should only receive `type` of 0 or 1")),
-            },
-            allow,
-            deny,
-        })
     }
 }
 
@@ -905,8 +723,20 @@ mod channel_tests {
     }
 
     #[test]
+    fn overwrite() {
+        let overwrite: Overwrite = serde_json::from_str(r#"{
+  "id": "124",
+  "type": 0,
+  "allow": "10011",
+  "deny": "100000"
+}"#).unwrap();
+        println!("overwrite = {:?}", overwrite);
+    }
+
+    #[test]
     fn guild_text() {
         assert(r#"{
+  "type": 0,
   "id": "41771983423143937",
   "guild_id": "41771983423143937",
   "name": "general",
@@ -917,14 +747,14 @@ mod channel_tests {
   "topic": "24/7 chat about how to gank Mike #2",
   "last_message_id": "155117677105512449",
   "parent_id": "399942396007890945",
-  "default_auto_archive_duration": 60,
-  "type": 0
+  "default_auto_archive_duration": 60
 }"#)
     }
 
     #[test]
     fn guild_announcement() {
         assert(r#"{
+  "type": 5,
   "id": "41771983423143937",
   "guild_id": "41771983423143937",
   "name": "important-news",
@@ -934,14 +764,14 @@ mod channel_tests {
   "topic": "Rumors about Half Life 3",
   "last_message_id": "155117677105512449",
   "parent_id": "399942396007890945",
-  "default_auto_archive_duration": 60,
-  "type": 5
+  "default_auto_archive_duration": 60
 }"#)
     }
 
     #[test]
     fn guild_voice() {
         assert(r#"{
+  "type": 2,
   "id": "155101607195836416",
   "guild_id": "41771983423143937",
   "position": 5,
@@ -953,14 +783,14 @@ mod channel_tests {
   "rtc_region": null,
   "permission_overwrites": [],
   "rate_limit_per_user": 0,
-  "nsfw": false,
-  "type": 2
+  "nsfw": false
 }"#)
     }
 
     #[test]
     fn dm() {
         assert(r#"{
+  "type": 1,
   "id": "319674150115610528",
   "last_message_id": "3343820033257021450",
   "recipients": [
@@ -970,14 +800,14 @@ mod channel_tests {
       "discriminator": "9999",
       "avatar": "33ecab261d4681afa4d85a04691c4a01"
     }
-  ],
-  "type": 1
+  ]
 }"#)
     }
 
     #[test]
     fn group_dm() {
         assert(r#"{
+  "type": 3,
   "id": "319674150115710528",
   "name": "Some test channel",
   "icon": null,
@@ -996,27 +826,27 @@ mod channel_tests {
     }
   ],
   "last_message_id": "3343820033257021450",
-  "owner_id": "82198810841029460",
-  "type": 3
+  "owner_id": "82198810841029460"
 }"#)
     }
 
     #[test]
     fn category_channel() {
         assert(r#"{
+  "type": 4,
   "id": "399942396007890945",
   "guild_id": "290926798629997250",
   "name": "Test",
   "permission_overwrites": [],
   "nsfw": false,
-  "position": 0,
-  "type": 4
+  "position": 0
 }"#)
     }
 
     #[test]
     fn thread() {
         let json = r#"{
+  "type": 11,
   "id": "41771983423143937",
   "guild_id": "41771983423143937",
   "parent_id": "41771983423143937",
@@ -1032,8 +862,7 @@ mod channel_tests {
     "archive_timestamp": "2021-04-12T23:40:39.855793Z",
     "locked": false
   },
-  "total_message_sent": 1,
-  "type": 11
+  "total_message_sent": 1
 }"#;
         let channel: Channel = serde_json::from_str(json).unwrap();
         let back = serde_json::to_string_pretty(&channel).unwrap();

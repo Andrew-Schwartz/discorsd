@@ -20,11 +20,14 @@ pub mod emoji;
 pub mod user;
 pub mod channel;
 pub mod message;
-pub mod interaction;
+pub mod old_interaction;
 pub mod commands;
 pub mod components;
 pub mod locales;
 pub mod auto_moderation;
+pub mod new_command;
+pub mod new_interaction;
+pub mod interaction_response;
 
 /// Information returned from the `/gateway/bot` endpoint, as in
 /// [gateway](crate::http::DiscordClient::gateway).
@@ -318,3 +321,49 @@ impl ImageFormat for Gif {
     const EXTENSION: &'static str = "gif";
     const ANIMATED: bool = true;
 }
+
+// #[cfg(test)]
+// mod tag_by_num {
+//     use serde::{Deserialize, Serialize};
+//
+//     use crate::model::ids::*;
+//
+//
+//     #[derive(Serialize, Deserialize, Debug)]
+//     pub struct Dm {
+//         id: ChannelId,
+//         last_message: MessageId,
+//         recipient: UserId,
+//     }
+//
+//     #[derive(Serialize, Deserialize, Debug)]
+//     pub struct Voice {
+//         id: ChannelId,
+//         name: String,
+//         bitrate: u32,
+//     }
+//
+//     #[test]
+//     fn serde_enum_tag_by_num() {
+//         serde_num_tag! {
+//             #[derive(Debug)]
+//             pub enum Channel = "type": u8 {
+//                 Text(Text) = 0,
+//                 Dm(Dm) = 1,
+//                 Voice(Voice) = 2,
+//             }
+//         }
+//
+//         const JSON: &str = r#"{
+//     "type": 0,
+//     "id": "123",
+//     "name": "A text channel",
+//     "last_message": "432"
+// }"#;
+//
+//         let result: Channel = serde_json::from_str(JSON).unwrap();
+//         println!("result = {:?}", result);
+//         let back = serde_json::to_string_pretty(&result).unwrap();
+//         println!("{back}");
+//     }
+// }

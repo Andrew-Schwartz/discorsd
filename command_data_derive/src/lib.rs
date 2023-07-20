@@ -465,6 +465,8 @@ mod menu_command;
 pub fn derive_data(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ty = input.ident;
+    dummy_impl(&ty);
+
     let generics = input.generics.params.into_iter()
         .map(|g| match g {
             GenericParam::Type(t) => t,
@@ -480,7 +482,6 @@ pub fn derive_data(input: TokenStream) -> TokenStream {
             ),
         })
         .collect();
-    dummy_impl(&ty);
 
     let tokens = match input.data {
         Data::Struct(data) => struct_data::struct_impl(&ty, generics, data.fields, &input.attrs),
@@ -611,8 +612,10 @@ handle_attribute! {
         ["va_ordinals" => self.vararg.get_or_insert_with(Default::default).names = VarargNames::Ordinals],
 
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), .. }), path =>
-        /// What to rename this field as in the Command. If the data struct is generic, you can
-        /// get the generic's arg name by wrapping the generic type in angle braces `<`, `>`.
+        /// What to rename this field as in the Command.
+        ///
+        /// If the data struct is generic, you can get the generic's arg name by wrapping the
+        /// generic type in angle braces `<`, `>`.
         ///
         /// ```rust
         /// # struct ChannelId; struct RoleId; struct UserId;
@@ -641,6 +644,7 @@ handle_attribute! {
         /// ```
         ///
         /// Will generate a command with the following options:
+        /// <todo get an image>
         // todo get an img
         ["rename" => {
             if let FieldIdent::Named(named) = &mut self.name {

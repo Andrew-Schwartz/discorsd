@@ -120,7 +120,7 @@ impl Enum {
                 TokenStream2::new()
             };
             quote_spanned! { v.ident.span() =>
-                ::std::iter::once(<Self::VecArg as ::discorsd::commands::VecArgLadder>::make(
+                ::std::iter::once(<Self::VecArg as ::discorsd::commands::NewVecArgLadder>::make(
                     #name, #desc, #options
                 ))#take
             }
@@ -250,7 +250,7 @@ impl Enum {
                 quote! { Vec::new() }
             };
             let quote = quote_spanned! { v.ident.span() =>
-                <Self::VecArg as ::discorsd::commands::VecArgLadder>::make(#name, #desc, #make_args)
+                <Self::VecArg as ::discorsd::commands::NewVecArgLadder>::make(#name, #desc, #make_args)
             };
             quote
         });
@@ -262,7 +262,7 @@ impl Enum {
                 let ty = &first.ty;
                 quote_spanned! { first.span() =>
                     #ident(
-                        <#ty as ::discorsd::commands::CommandData<#c_ty>>::from_options(lower)?
+                        <#ty as ::discorsd::commands::CommandData<#c_ty>>::from_options(options)?
                     )
                 }
             } else {
@@ -283,11 +283,11 @@ impl Enum {
                 <
                     <
                         #first_variant_ty as ::discorsd::model::commands::CommandData<#c_ty>
-                    >::Options as ::discorsd::model::commands::OptionsLadder
+                    >::Options as ::discorsd::model::commands::NewOptionsLadder
                 >::Raise;
 
                 fn from_options(
-                    Self::Options { name, lower }: Self::Options,
+                    Self::Options { name, name_localizations, data: ::discorsd::model::new_interaction::HasOptions { options }, focused }: Self::Options,
                 ) -> ::std::result::Result<Self, ::discorsd::errors::CommandParseError> {
                     match name.as_str() {
                         #(#match_branches,)*
@@ -302,14 +302,15 @@ impl Enum {
                 <
                     <
                         #first_variant_ty as ::discorsd::model::commands::CommandData<#c_ty>
-                    >::VecArg as ::discorsd::model::commands::VecArgLadder
+                    >::VecArg as ::discorsd::model::commands::NewVecArgLadder
                 >::Raise;
 
                 fn make_args(command: &#c_ty) -> ::std::vec::Vec<Self::VecArg> {
                     vec![#(#args),*]
                 }
 
-                type Choice = Self;
+                type Choice = ::std::convert::Infallible;
+                type ChoicePrimitive = ::std::convert::Infallible;
             }
         }
     }
@@ -343,10 +344,10 @@ impl Enum {
         quote! {
             #command_data_impl_statement for #ty {
                 // All inline struct enums are SubCommands
-                type Options = ::discorsd::model::interaction::CommandOption;
+                type Options = ::discorsd::model::new_interaction::DataOption<::discorsd::model::new_interaction::SubCommand>;
 
                 fn from_options(
-                    Self::Options { name, lower: options }: Self::Options
+                    Self::Options { name, name_localizations, data: ::discorsd::model::new_interaction::HasOptions { options }, focused }: Self::Options
                 ) -> ::std::result::Result<Self, ::discorsd::errors::CommandParseError> {
                     use ::discorsd::errors::*;
                     match name.as_str() {
@@ -359,13 +360,14 @@ impl Enum {
                 }
 
                 // All inline struct enums are SubCommands
-                type VecArg = ::discorsd::model::interaction::SubCommand;
+                type VecArg = ::discorsd::model::new_command::SubCommandOption;
 
                 fn make_args(command: &#c_ty) -> ::std::vec::Vec<Self::VecArg> {
                     #make_args_vec
                 }
 
-                type Choice = Self;
+                type Choice = ::std::convert::Infallible;
+                type ChoicePrimitive = ::std::convert::Infallible;
             }
         }
     }

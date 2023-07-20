@@ -1,20 +1,45 @@
-use serde::{Serialize, Deserialize, Serializer};
-use crate::model::emoji::Emoji;
-use crate::serde_utils::BoolExt;
-use serde::de::Error;
-use std::convert::TryFrom;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct ActionRow {
-    #[serde(rename = "type")]
-    kind: u8,
-    components: Vec<Component>,
+use crate::model::channel::ChannelType;
+use crate::model::emoji::Emoji;
+use crate::model::ids::{ChannelId, UserId, RoleId, MentionableId};
+use crate::serde_utils::{BoolExt, SkipUnit};
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum Components {
+    Inline(Vec<ActionRow>),
+    /// currently only the TextInput component is supported
+    Modal {
+        /// a developer-defined identifier for the modal, max 100 characters
+        custom_id: ComponentId,
+        /// the title of the popup modal, max 45 characters
+        title: String,
+        /// between 1 and 5 (inclusive) components that make up the modal
+        components: Vec<Component>
+    }
 }
+
+serde_num_tag! {
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum ActionRow = "type": ComponentType {
+        (ComponentType::ActionRow) = ActionRow {
+            components: Vec<Component>,
+        }
+    }
+}
+
+// #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+// pub struct ActionRow {
+//     #[serde(rename = "type")]
+//     kind: u8,
+//     components: Vec<Component>,
+// }
 
 impl ActionRow {
     pub fn action_row(components: Vec<Component>) -> Self {
         // todo validate at most 5 components
-        Self { kind: 1, components }
+        Self::ActionRow { components }
     }
 
     pub fn buttons(buttons: Vec<Button>) -> Self {
@@ -23,32 +48,39 @@ impl ActionRow {
             .collect())
     }
 
-    pub fn select_menu(menu: SelectMenu) -> Self {
-        Self::action_row(vec![Component::SelectMenu(menu)])
+    pub fn select_menu(menu: SelectMenu<String>) -> Self {
+        Self::action_row(vec![Component::SelectString(menu)])
+    }
+
+    pub fn text_input(input: TextInput) -> Self {
+        Self::action_row(vec![Component::TextInput(input)])
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
-#[serde(try_from = "RawComponent")]
-pub enum Component {
-    Button(Button),
-    SelectMenu(SelectMenu),
+serde_repr! {
+    pub enum ComponentType: u8 {
+        ActionRow = 1,
+        Button = 2,
+        StringMenu = 3,
+        TextInput = 4,
+        UserMenu = 5,
+        RoleMenu = 6,
+        MentionableMenu = 7,
+        ChannelMenu = 8,
+    }
 }
 
-impl Serialize for Component {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        #[derive(Serialize)]
-        struct Shim<'a, R> {
-            #[serde(flatten)]
-            row: &'a R,
-            #[serde(rename = "type")]
-            t: u8,
-        }
-
-        match self {
-            Self::Button(buttons) => Shim { row: buttons, t: 2 }.serialize(s),
-            Self::SelectMenu(menu) => Shim { row: menu, t: 3 }.serialize(s),
-        }
+// todo is this just serialize?
+serde_num_tag! {
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum Component = "type": ComponentType {
+        (ComponentType::Button) = Button(Button),
+        (ComponentType::StringMenu) = SelectString(SelectMenu<String>),
+        (ComponentType::TextInput) = TextInput(TextInput),
+        (ComponentType::UserMenu) = SelectUser(SelectMenu<UserId>),
+        (ComponentType::RoleMenu) = SelectRole(SelectMenu<RoleId>),
+        (ComponentType::MentionableMenu) = SelectMentionable(SelectMenu<MentionableId>),
+        (ComponentType::ChannelMenu) = SelectChannel(SelectMenu<ChannelId>),
     }
 }
 
@@ -61,51 +93,6 @@ impl<S> From<S> for ComponentId
     where String: From<S> {
     fn from(s: S) -> Self {
         Self(String::from(s))
-    }
-}
-
-#[derive(Deserialize)]
-struct RawComponent {
-    #[serde(rename = "type")]
-    kind: u8,
-    custom_id: Option<ComponentId>,
-    disabled: Option<bool>,
-    style: Option<ButtonStyle>,
-    label: Option<String>,
-    emoji: Option<Emoji>,
-    url: Option<String>,
-    options: Option<Vec<SelectOption>>,
-    placeholder: Option<String>,
-    min_values: Option<u8>,
-    max_values: Option<u8>,
-    // components: Option<Vec<RawComponent>>,
-}
-
-impl TryFrom<RawComponent> for Component {
-    type Error = crate::serde_utils::Error;
-
-    fn try_from(raw: RawComponent) -> Result<Self, Self::Error> {
-        // todo this
-        match raw.kind {
-            1 => Err(Self::Error::Serde(serde_json::Error::custom("todo not ActionRow"))),
-            2 => Ok(Self::Button(Button {
-                style: raw.style.unwrap(),
-                label: raw.label,
-                emoji: raw.emoji,
-                custom_id: raw.custom_id,
-                url: raw.url,
-                disabled: raw.disabled.unwrap_or(false),
-            })),
-            3 => Ok(Self::SelectMenu(SelectMenu {
-                custom_id: raw.custom_id.unwrap(),
-                options: raw.options.unwrap(),
-                placeholder: raw.placeholder,
-                min_values: raw.min_values,
-                max_values: raw.max_values,
-                disabled: raw.disabled.unwrap_or(false),
-            })),
-            _bad => todo!(),
-        }
     }
 }
 
@@ -153,19 +140,38 @@ serde_repr! {
     }
 }
 
-/*
-(\w+)\??\t(.+)\t(.+)
-
-/// $3
-\tpub $1: Option<$2>,
- */
+pub trait SelectMenuType {
+    type SelectOptions: SkipUnit;
+    type ChannelTypes: SkipUnit;
+}
+macro_rules! smt {
+    ($($t:ty => $so:ty, $ct:ty);* $(;)?) => {
+        $(
+            impl SelectMenuType for $t {
+                type SelectOptions = $so;
+                type ChannelTypes = $ct;
+            }
+        )*
+    };
+}
+smt! {
+    String => Vec<SelectOption>, ();
+    UserId => (), ();
+    RoleId => (), ();
+    MentionableId => (), ();
+    ChannelId => (), Vec<ChannelType>;
+}
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct SelectMenu {
+pub struct SelectMenu<T: SelectMenuType> {
     /// a developer-defined identifier for the button, max 100 characters
     pub custom_id: ComponentId,
     /// the choices in the select, max 25
-    pub options: Vec<SelectOption>,
+    #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
+    pub options: T::SelectOptions,
+    /// List of channel types to include
+    #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
+    pub channel_types: T::ChannelTypes,
     /// custom placeholder text if nothing is selected, max 100 characters
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
@@ -197,21 +203,60 @@ pub struct SelectOption {
     pub default: bool,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub struct TextInput {
+    /// Developer-defined identifier for the input; max 100 characters
+	pub custom_id: String,
+    /// The Text Input Style
+	pub style: TextInputStyle,
+    /// Label for this component; max 45 characters
+	pub label: String,
+    /// Minimum input length for a text input; min 0, max 4000
+    #[serde(skip_serializing_if = "Option::is_none")]
+	pub min_length: Option<usize>,
+    /// Maximum input length for a text input; min 1, max 4000
+    #[serde(skip_serializing_if = "Option::is_none")]
+	pub max_length: Option<usize>,
+    /// Whether this component is required to be filled (defaults to true)
+    #[serde(default = "bool::default_true", skip_serializing_if = "bool::is_true")]
+	pub required: bool,
+    /// Pre-filled value for this component; max 4000 characters
+    #[serde(skip_serializing_if = "Option::is_none")]
+	pub value: Option<String>,
+    /// Custom placeholder text if the input is empty; max 100 characters
+    #[serde(skip_serializing_if = "Option::is_none")]
+	pub placeholder: Option<String>,
+}
+
+serde_repr! {
+    pub enum TextInputStyle: u8 {
+        Short = 1,
+        Paragraph = 2,
+    }
+}
+
 // Testing:
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::model::emoji::CustomEmoji;
     use crate::model::ids::EmojiId;
 
-    #[derive(Serialize, Deserialize, Debug)]
-    struct Message {
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct MyMessage {
         content: &'static str,
         components: Vec<ActionRow>,
     }
 
-    // todo?
+    fn test(correct: &'static str, message: MyMessage) {
+        let serialized = serde_json::to_string_pretty(&message).unwrap();
+        assert_eq!(serialized, correct);
+        let deserialized: MyMessage = serde_json::from_str(correct).unwrap();
+        assert_eq!(deserialized, message);
+    }
+
     #[test]
     fn empty_component() {
         const CORRECT: &str = r#"{
@@ -223,15 +268,13 @@ mod tests {
     }
   ]
 }"#;
-        let message = Message {
+        let message = MyMessage {
             content: "This is a message with components",
             components: vec![
                 ActionRow::action_row(vec![])
             ],
         };
-        let serialized = serde_json::to_string_pretty(&message).unwrap();
-        println!("serialized = {:#?}", serialized);
-        assert_eq!(serialized, CORRECT);
+        test(CORRECT, message);
     }
 
     #[test]
@@ -243,16 +286,16 @@ mod tests {
       "type": 1,
       "components": [
         {
+          "type": 2,
           "style": 1,
           "label": "Click me!",
-          "custom_id": "click_one",
-          "type": 2
+          "custom_id": "click_one"
         }
       ]
     }
   ]
 }"#;
-        let message = Message {
+        let message = MyMessage {
             content: "This is a message with components",
             components: vec![
                 ActionRow::action_row(vec![Component::Button(
@@ -267,10 +310,8 @@ mod tests {
                 ])
             ],
         };
-        let serialized = serde_json::to_string_pretty(&message).unwrap();
-        println!("serialized = {:#?}", serialized);
-        assert_eq!(serialized, CORRECT);
-        let message = Message {
+        test(CORRECT, message);
+        let message = MyMessage {
             content: "This is a message with components",
             components: vec![
                 ActionRow::buttons(vec![
@@ -285,9 +326,7 @@ mod tests {
                 ])
             ],
         };
-        let serialized = serde_json::to_string_pretty(&message).unwrap();
-        println!("serialized = {:#?}", serialized);
-        assert_eq!(serialized, CORRECT);
+        test(CORRECT, message)
     }
 
     #[test]
@@ -299,6 +338,7 @@ mod tests {
       "type": 1,
       "components": [
         {
+          "type": 3,
           "custom_id": "class_select_1",
           "options": [
             {
@@ -331,14 +371,13 @@ mod tests {
           ],
           "placeholder": "Choose a class",
           "min_values": 1,
-          "max_values": 3,
-          "type": 3
+          "max_values": 3
         }
       ]
     }
   ]
 }"#;
-        let message = Message {
+        let message = MyMessage {
             content: "Mason is looking for new arena partners. What classes do you play?",
             components: vec![ActionRow::select_menu(SelectMenu {
                 custom_id: "class_select_1".into(),
@@ -373,14 +412,53 @@ mod tests {
                         default: false,
                     },
                 ],
+                channel_types: (),
                 placeholder: Some("Choose a class".to_string()),
                 min_values: Some(1),
                 max_values: Some(3),
                 disabled: false,
             })],
         };
-        let serialized = serde_json::to_string_pretty(&message).unwrap();
-        println!("serialized = {:#?}", serialized);
-        assert_eq!(serialized, CORRECT);
+        test(CORRECT, message);
+    }
+
+    #[test]
+    fn action_row_with_text_input() {
+        const CORRECT: &str = r#"{
+  "content": "Message content",
+  "components": {
+    "title": "My Cool Modal",
+    "custom_id": "cool_modal",
+    "components": [{
+      "type": 1,
+      "components": [{
+        "type": 4,
+        "custom_id": "name",
+        "label": "Name",
+        "style": 1,
+        "min_length": 1,
+        "max_length": 4000,
+        "placeholder": "John",
+        "required": true
+      }]
+    }]
+  }
+}"#;
+        // let message = Message {
+        //     content: "Message content",
+        //     components: vec![
+        //         ActionRow::text_input(TextInput {
+        //             custom_id: (),
+        //             style: TextInputStyle::Short,
+        //             label: (),
+        //             min_length: None,
+        //             max_length: None,
+        //             required: false,
+        //             value: None,
+        //             placeholder: None,
+        //         })
+        //     ],
+        // };
+        // todo
     }
 }

@@ -27,7 +27,6 @@ use crate::commands::SlashCommandRaw;
 use crate::http::ClientError;
 use crate::macros::API_VERSION;
 use crate::model::ids::{CommandId, Id};
-use crate::serde_utils::nice_from_str;
 use crate::shard::model::Heartbeat;
 
 pub mod model;
@@ -182,7 +181,8 @@ impl<B: Bot + 'static> Shard<B> {
             if let Ok(next) = result {
                 match next {
                     Ok(Some(Message::Text(text))) => {
-                        let read = nice_from_str(&text);
+                        // let read = nice_from_str(&text);
+                        let read = serde_json::from_str(&text);
                         let payload = match read {
                             Ok(payload) => payload,
                             Err(payload_parse_error) => {

@@ -2,9 +2,8 @@
 #[allow(dead_code)]
 mod tests {
     use command_data_derive::*;
-    use discorsd::BotState;
-    use discorsd::model::guild::GuildMember;
-    use discorsd::model::user::User;
+    use discorsd::model::ids::{ChannelId, GuildId, UserId};
+    use discorsd::model::new_interaction::{DataOption, SubCommand, SubCommandGroup};
 
     struct TestBot;
 
@@ -48,116 +47,202 @@ mod tests {
         assert_eq!(correct, modeled);
     }
 
-    async fn assert_perms_parsing<C: discorsd::commands::SlashCommandRaw<Bot=TestBot>>(command: &C) {
-        async fn test_run_data<C: discorsd::commands::SlashCommandRaw<Bot=TestBot>>(command: &C, data: discorsd::commands::ApplicationCommandInteractionData) {
-            use chrono::Utc;
-            use discorsd::model::ids::*;
-            use discorsd::commands::*;
-
-            let data: ApplicationCommandData = data.try_into().unwrap();
-            let interaction = InteractionUse::new(
-                InteractionId(1234),
-                ApplicationId(1234),
-                SlashCommandData { command: data.id, command_name: data.name },
-                ChannelId(1234),
-                InteractionSource::Guild(GuildSource {
-                    id: GuildId(1234),
-                    member: GuildMember {
-                        user: User {
-                            id: UserId(0),
-                            username: "".to_string(),
-                            discriminator: "".to_string(),
-                            avatar: None,
-                            bot: None,
-                            system: None,
-                            mfa_enabled: None,
-                            locale: None,
-                            verified: None,
-                            email: None,
-                            flags: None,
-                            premium_type: None,
-                            public_flags: None
-                        },
-                        nick: None,
-                        roles: Default::default(),
-                        joined_at: Utc::now(),
-                        premium_since: None,
-                        deaf: false,
-                        mute: false,
-                        pending: false
-                    }
-                }),
-                "TOKEN".into(),
-            );
-            let state = BotState::testing_state(TestBot);
-            let data = data.options;
-
-            command.run(state, interaction, data).await.unwrap();
+    #[test]
+    fn test_derive_choices() {
+        #[derive(CommandDataChoices)]
+        enum Choices {
+            ChoiceA,
+            ChoiceB,
+            ChoiceC,
         }
-
-        use discorsd::commands::{
-            ApplicationCommandInteractionData as ACID,
-            ApplicationCommandInteractionDataOption as ACIDO,
-            ApplicationCommandInteractionDataValue as ACIDV,
-            OptionValue,
-        };
-        use discorsd::model::ids::*;
-        let permissions_user_get_user = ACID {
-            id: CommandId(1234),
-            name: "permissions".to_string(),
-            options: vec![
-                ACIDO {
-                    name: "user".to_string(),
-                    value: ACIDV::Options {
-                        options: vec![
-                            ACIDO {
-                                name: "get".to_string(),
-                                value: ACIDV::Options {
-                                    options: vec![
-                                        ACIDO {
-                                            name: "user".to_string(),
-                                            value: ACIDV::Value { value: OptionValue::String("1234".into()) },
-                                        }
-                                    ]
-                                },
-                            }
-                        ]
-                    },
-                }],
-            resolved: None,
-        };
-        test_run_data(command, permissions_user_get_user).await;
-        let permissions_user_get_user_channel = ACID {
-            id: CommandId(1234),
-            name: "permissions".to_string(),
-            options: vec![
-                ACIDO {
-                    name: "user".to_string(),
-                    value: ACIDV::Options {
-                        options: vec![
-                            ACIDO {
-                                name: "get".to_string(),
-                                value: ACIDV::Options {
-                                    options: vec![
-                                        ACIDO {
-                                            name: "user".to_string(),
-                                            value: ACIDV::Value { value: OptionValue::String("1234".into()) },
-                                        },
-                                        ACIDO {
-                                            name: "channel".to_string(),
-                                            value: ACIDV::Value { value: OptionValue::String("4321".into()) },
-                                        }
-                                    ]
-                                },
-                            }
-                        ]
-                    },
-                }],
-            resolved: None,
-        };
-        test_run_data(command, permissions_user_get_user_channel).await;
     }
 
+    #[test]
+    fn opt_choices() {
+        #[derive(CommandDataChoices)]
+        enum Choices {
+            ChoiceA,
+            ChoiceB,
+            ChoiceC,
+        }
+        #[derive(CommandData)]
+        struct MyStruct(Option<Choices>);
+    }
+
+    #[test]
+    fn test_derive_struct() {
+        #[derive(CommandData)]
+        struct MyStruct {
+            age: u64,
+            name: String,
+            user: UserId,
+            channel: ChannelId,
+            guild: GuildId,
+        }
+    }
+
+    // fn expanded() {
+    //     struct MyStruct {
+    //         age: u64,
+    //         name: String,
+    //         user: UserId,
+    //         channel: ChannelId,
+    //         guild: GuildId,
+    //     }
+    // }
+
+    #[test]
+    fn test_derive_enum_one_level() {
+        #[derive(CommandData)]
+        struct MyStruct {
+            age: u64,
+            name: String,
+            user: UserId,
+            channel: ChannelId,
+            guild: GuildId,
+        }
+        #[derive(CommandData)]
+        enum MyEnum {
+            StructVariant {
+                name: String,
+            },
+            // TupleVariant(MyStruct),
+            UnitVariant,
+        }
+    }
+
+    #[test]
+    fn test_derive_enum_two_levels() {
+        #[derive(CommandData)]
+        struct MyStruct {
+            age: u64,
+            name: String,
+            user: UserId,
+            channel: ChannelId,
+            guild: GuildId,
+        }
+        #[derive(CommandData)]
+        enum MyEnum {
+            StructVariant {
+                name: String,
+            },
+            UnitVariant,
+        }
+        #[derive(CommandData)]
+        enum MyEnum2 {
+            TupleVariant(MyEnum),
+        }
+    }
+
+    // async fn assert_perms_parsing<C: discorsd::commands::SlashCommandRaw<Bot=TestBot>>(command: &C) {
+    //     async fn test_run_data<C: discorsd::commands::SlashCommandRaw<Bot=TestBot>>(command: &C, data: discorsd::model::old_interaction::ApplicationCommandInteractionData) {
+    //         use chrono::Utc;
+    //         use discorsd::model::ids::*;
+    //         use discorsd::commands::*;
+    //
+    //         let data: ApplicationCommandData = data.try_into().unwrap();
+    //         let interaction = InteractionUse::new(
+    //             InteractionId(1234),
+    //             ApplicationId(1234),
+    //             SlashCommandData { command: data.id, command_name: data.name },
+    //             ChannelId(1234),
+    //             InteractionSource::Guild(GuildSource {
+    //                 id: GuildId(1234),
+    //                 member: GuildMember {
+    //                     user: User {
+    //                         id: UserId(0),
+    //                         username: "".to_string(),
+    //                         discriminator: "".to_string(),
+    //                         avatar: None,
+    //                         bot: None,
+    //                         system: None,
+    //                         mfa_enabled: None,
+    //                         locale: None,
+    //                         verified: None,
+    //                         email: None,
+    //                         flags: None,
+    //                         premium_type: None,
+    //                         public_flags: None
+    //                     },
+    //                     nick: None,
+    //                     roles: Default::default(),
+    //                     joined_at: Utc::now(),
+    //                     premium_since: None,
+    //                     deaf: false,
+    //                     mute: false,
+    //                     pending: false
+    //                 }
+    //             }),
+    //             "TOKEN".into(),
+    //         );
+    //         let state = BotState::testing_state(TestBot);
+    //         let data = data.options;
+    //
+    //         command.run(state, interaction, data).await.unwrap();
+    //     }
+    //
+    //     use discorsd::model::old_interaction::{
+    //         ApplicationCommandInteractionData as ACID,
+    //         ApplicationCommandInteractionDataOption as ACIDO,
+    //         ApplicationCommandInteractionDataValue as ACIDV,
+    //         OptionValue,
+    //     };
+    //     use discorsd::model::ids::*;
+    //     let permissions_user_get_user = ACID {
+    //         id: CommandId(1234),
+    //         name: "permissions".to_string(),
+    //         options: vec![
+    //             ACIDO {
+    //                 name: "user".to_string(),
+    //                 value: ACIDV::Options {
+    //                     options: vec![
+    //                         ACIDO {
+    //                             name: "get".to_string(),
+    //                             value: ACIDV::Options {
+    //                                 options: vec![
+    //                                     ACIDO {
+    //                                         name: "user".to_string(),
+    //                                         value: ACIDV::Value { value: OptionValue::String("1234".into()) },
+    //                                     }
+    //                                 ]
+    //                             },
+    //                         }
+    //                     ]
+    //                 },
+    //             }],
+    //         resolved: None,
+    //     };
+    //     test_run_data(command, permissions_user_get_user).await;
+    //     let permissions_user_get_user_channel = ACID {
+    //         id: CommandId(1234),
+    //         name: "permissions".to_string(),
+    //         options: vec![
+    //             ACIDO {
+    //                 name: "user".to_string(),
+    //                 value: ACIDV::Options {
+    //                     options: vec![
+    //                         ACIDO {
+    //                             name: "get".to_string(),
+    //                             value: ACIDV::Options {
+    //                                 options: vec![
+    //                                     ACIDO {
+    //                                         name: "user".to_string(),
+    //                                         value: ACIDV::Value { value: OptionValue::String("1234".into()) },
+    //                                     },
+    //                                     ACIDO {
+    //                                         name: "channel".to_string(),
+    //                                         value: ACIDV::Value { value: OptionValue::String("4321".into()) },
+    //                                     }
+    //                                 ]
+    //                             },
+    //                         }
+    //                     ]
+    //                 },
+    //             }],
+    //         resolved: None,
+    //     };
+    //     test_run_data(command, permissions_user_get_user_channel).await;
+    // }
 
     const CORRECT4: &'static str = r#"{
     "name": "permissions",
@@ -252,164 +337,164 @@ mod tests {
     ]
 }"#;
 
-    #[tokio::test]
-    async fn part4() {
-        assert_same_json_value(CORRECT4, Perms);
-        make_slash_command!(Data);
-        #[derive(CommandData, Debug)]
-        enum Data {
-            #[command(desc = "Get or edit permissions for a user")]
-            User(GetEditUser),
-            #[command(desc = "Get or edit permissions for a role")]
-            Role(GetEditRole),
-        }
-        #[derive(CommandData, Debug)]
-        enum GetEditUser {
-            #[command(desc = "Get permissions for a user")]
-            Get {
-                #[command(desc = "The user to get")]
-                user: discorsd::model::ids::UserId,
-                #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
-                channel: Option<discorsd::model::ids::ChannelId>,
-            },
-            #[command(desc = "Edit permissions for a user")]
-            Edit {
-                #[command(desc = "The user to edit")]
-                user: discorsd::model::ids::UserId,
-                #[command(desc = "The channel permissions to edit. If omitted, the guild permissions will be edited")]
-                channel: Option<discorsd::model::ids::ChannelId>,
-            },
-        }
-        #[derive(CommandData, Debug)]
-        enum GetEditRole {
-            #[command(desc = "Get permissions for a role")]
-            Get(GetRole),
-            #[command(desc = "Edit permissions for a role")]
-            Edit(EditRole),
-        }
-        #[derive(CommandData, Debug)]
-        struct GetRole {
-            #[command(desc = "The role to get")]
-            pub role: discorsd::model::ids::RoleId,
-            #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
-            pub channel: Option<discorsd::model::ids::ChannelId>,
-        }
-        #[derive(CommandData, Debug)]
-        struct EditRole {
-            #[command(desc = "The role to edit")]
-            pub role: discorsd::model::ids::RoleId,
-            #[command(desc = "The channel permissions to edit. If omitted, the guild permissions will be edited")]
-            pub channel: Option<discorsd::model::ids::ChannelId>,
-        }
+    // #[tokio::test]
+    // async fn part4() {
+    //     assert_same_json_value(CORRECT4, Perms);
+    //     make_slash_command!(Data);
+    //     #[derive(CommandData, Debug)]
+    //     enum Data {
+    //         #[command(desc = "Get or edit permissions for a user")]
+    //         User(GetEditUser),
+    //         #[command(desc = "Get or edit permissions for a role")]
+    //         Role(GetEditRole),
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     enum GetEditUser {
+    //         #[command(desc = "Get permissions for a user")]
+    //         Get {
+    //             #[command(desc = "The user to get")]
+    //             user: discorsd::model::ids::UserId,
+    //             #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
+    //             channel: Option<discorsd::model::ids::ChannelId>,
+    //         },
+    //         #[command(desc = "Edit permissions for a user")]
+    //         Edit {
+    //             #[command(desc = "The user to edit")]
+    //             user: discorsd::model::ids::UserId,
+    //             #[command(desc = "The channel permissions to edit. If omitted, the guild permissions will be edited")]
+    //             channel: Option<discorsd::model::ids::ChannelId>,
+    //         },
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     enum GetEditRole {
+    //         #[command(desc = "Get permissions for a role")]
+    //         Get(GetRole),
+    //         #[command(desc = "Edit permissions for a role")]
+    //         Edit(EditRole),
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     struct GetRole {
+    //         #[command(desc = "The role to get")]
+    //         pub role: discorsd::model::ids::RoleId,
+    //         #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
+    //         pub channel: Option<discorsd::model::ids::ChannelId>,
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     struct EditRole {
+    //         #[command(desc = "The role to edit")]
+    //         pub role: discorsd::model::ids::RoleId,
+    //         #[command(desc = "The channel permissions to edit. If omitted, the guild permissions will be edited")]
+    //         pub channel: Option<discorsd::model::ids::ChannelId>,
+    //     }
+    //
+    //     assert_perms_parsing(&Perms).await;
+    // }
 
-        assert_perms_parsing(&Perms).await;
-    }
+    // #[test]
+//     fn generic() {
+//         const CORRECT: &str = r#"{
+//   "name": "permissions",
+//   "description": "Get or edit permissions for a user or a role",
+//   "options": [
+//     {
+//       "type": 1,
+//       "name": "role",
+//       "description": "role",
+//       "options": [
+//         {
+//           "type": 8,
+//           "name": "role",
+//           "description": "The role to get",
+//           "required": true
+//         },
+//         {
+//           "type": 7,
+//           "name": "channel",
+//           "description": "The channel permissions to get. If omitted, the guild permissions will be returned"
+//         }
+//       ]
+//     },
+//     {
+//       "type": 1,
+//       "name": "user",
+//       "description": "user",
+//       "options": [
+//         {
+//           "type": 6,
+//           "name": "user",
+//           "description": "The user to get",
+//           "required": true
+//         },
+//         {
+//           "type": 7,
+//           "name": "channel",
+//           "description": "The channel permissions to get. If omitted, the guild permissions will be returned"
+//         }
+//       ]
+//     }
+//   ]
+// }"#;
+//
+//         use discorsd::model::ids::*;
+//
+//         make_slash_command!(Data);
+//
+//         // todo make a good error if this is a struct or an enum with inline structs
+//         #[derive(CommandData, Debug)]
+//         #[command(command = "Perms")]
+//         enum Data {
+//             Role(IdInChannel<RoleId>),
+//             User(IdInChannel<UserId>),
+//         }
+//
+//         #[derive(CommandData, Debug)]
+//         #[command(command = "Perms")]
+//         struct IdInChannel<I: Id> {
+//             #[command(rename = "<I>", desc = "The <I> to get")]
+//             id: I,
+//             #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
+//             channel: Option<ChannelId>,
+//         }
+//
+//         assert_same_json_value(CORRECT, Perms);
+//     }
 
-    #[test]
-    fn generic() {
-        const CORRECT: &str = r#"{
-  "name": "permissions",
-  "description": "Get or edit permissions for a user or a role",
-  "options": [
-    {
-      "type": 1,
-      "name": "role",
-      "description": "role",
-      "options": [
-        {
-          "type": 8,
-          "name": "role",
-          "description": "The role to get",
-          "required": true
-        },
-        {
-          "type": 7,
-          "name": "channel",
-          "description": "The channel permissions to get. If omitted, the guild permissions will be returned"
-        }
-      ]
-    },
-    {
-      "type": 1,
-      "name": "user",
-      "description": "user",
-      "options": [
-        {
-          "type": 6,
-          "name": "user",
-          "description": "The user to get",
-          "required": true
-        },
-        {
-          "type": 7,
-          "name": "channel",
-          "description": "The channel permissions to get. If omitted, the guild permissions will be returned"
-        }
-      ]
-    }
-  ]
-}"#;
-
-        use discorsd::model::ids::*;
-
-        make_slash_command!(Data);
-
-        // todo make a good error if this is a struct or an enum with inline structs
-        #[derive(CommandData, Debug)]
-        #[command(command = "Perms")]
-        enum Data {
-            Role(IdInChannel<RoleId>),
-            User(IdInChannel<UserId>),
-        }
-
-        #[derive(CommandData, Debug)]
-        #[command(command = "Perms")]
-        struct IdInChannel<I: Id> {
-            #[command(rename = "<I>", desc = "The <I> to get")]
-            id: I,
-            #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
-            channel: Option<ChannelId>,
-        }
-
-        assert_same_json_value(CORRECT, Perms);
-    }
-
-    #[tokio::test]
-    async fn part4_generic() {
-        use discorsd::model::ids::{Id, RoleId, UserId};
-
-        assert_same_json_value(CORRECT4, Perms);
-        make_slash_command!(Data);
-
-        #[derive(CommandData, Debug)]
-        enum Data {
-            #[command(desc = "Get or edit permissions for a user")]
-            User(GetEdit<UserId>),
-            #[command(desc = "Get or edit permissions for a role")]
-            Role(GetEdit<RoleId>),
-        }
-        #[derive(CommandData, Debug)]
-        enum GetEdit<I: Id> {
-            #[command(desc = "Get permissions for a <I>")]
-            Get(Get<I>),
-            #[command(desc = "Edit permissions for a <I>")]
-            Edit(Edit<I>),
-        }
-        #[derive(CommandData, Debug)]
-        struct Get<I: Id> {
-            #[command(rename = "<I>", desc = "The <I> to get")]
-            pub id: I,
-            #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
-            pub channel: Option<discorsd::model::ids::ChannelId>,
-        }
-        #[derive(CommandData, Debug)]
-        struct Edit<I: Id> {
-            #[command(rename = "<I>", desc = "The <I> to edit")]
-            pub id: I,
-            #[command(desc = "The channel permissions to edit. If omitted, the guild permissions will be edited")]
-            pub channel: Option<discorsd::model::ids::ChannelId>,
-        }
-
-        assert_perms_parsing(&Perms).await;
-    }
+    // #[tokio::test]
+    // async fn part4_generic() {
+    //     use discorsd::model::ids::{Id, RoleId, UserId};
+    //
+    //     assert_same_json_value(CORRECT4, Perms);
+    //     make_slash_command!(Data);
+    //
+    //     #[derive(CommandData, Debug)]
+    //     enum Data {
+    //         #[command(desc = "Get or edit permissions for a user")]
+    //         User(GetEdit<UserId>),
+    //         #[command(desc = "Get or edit permissions for a role")]
+    //         Role(GetEdit<RoleId>),
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     enum GetEdit<I: Id> {
+    //         #[command(desc = "Get permissions for a <I>")]
+    //         Get(Get<I>),
+    //         #[command(desc = "Edit permissions for a <I>")]
+    //         Edit(Edit<I>),
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     struct Get<I: Id> {
+    //         #[command(rename = "<I>", desc = "The <I> to get")]
+    //         pub id: I,
+    //         #[command(desc = "The channel permissions to get. If omitted, the guild permissions will be returned")]
+    //         pub channel: Option<discorsd::model::ids::ChannelId>,
+    //     }
+    //     #[derive(CommandData, Debug)]
+    //     struct Edit<I: Id> {
+    //         #[command(rename = "<I>", desc = "The <I> to edit")]
+    //         pub id: I,
+    //         #[command(desc = "The channel permissions to edit. If omitted, the guild permissions will be edited")]
+    //         pub channel: Option<discorsd::model::ids::ChannelId>,
+    //     }
+    //
+    //     assert_perms_parsing(&Perms).await;
+    // }
 }

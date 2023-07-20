@@ -3,15 +3,13 @@
 //! Use these [`impl DiscordClient`](../struct.DiscordClient.html#impl-1) methods for the low level api
 //! for channel related requests.
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::BotState;
-use crate::commands::{ApplicationCommand, CommandPermissions, GuildApplicationCommandPermission};
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::routes::Route::*;
 use crate::model::guild::GuildMember;
-use crate::model::ids::{CommandId, GuildId, Id, RoleId, UserId};
+use crate::model::ids::{GuildId, RoleId, UserId};
 use crate::model::message::Color;
 use crate::model::permissions::{Permissions, Role};
 
@@ -100,128 +98,128 @@ pub struct CreateRole {
     pub mentionable: bool,
 }
 
-// todo impl a similar trait on guild?
-#[async_trait]
-pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
-    async fn edit_permissions<B, State>(
-        self,
-        state: State,
-        guild: GuildId,
-        permissions: Vec<CommandPermissions>,
-    ) -> ClientResult<GuildApplicationCommandPermission>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send
-    {
-        let state = state.as_ref();
-        let id = self.id();
-        state.client.edit_application_command_permissions(
-            state.application_id(),
-            guild,
-            id,
-            permissions,
-        ).await
-    }
+// // todo impl a similar trait on guild?
+// #[async_trait]
+// pub trait CommandPermsExt: Id<Id=CommandId> + Sized {
+//     async fn edit_permissions<B, State>(
+//         self,
+//         state: State,
+//         guild: GuildId,
+//         permissions: Vec<CommandPermissions>,
+//     ) -> ClientResult<GuildApplicationCommandPermission>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send
+//     {
+//         let state = state.as_ref();
+//         let id = self.id();
+//         state.client.edit_application_command_permissions(
+//             state.application_id(),
+//             guild,
+//             id,
+//             permissions,
+//         ).await
+//     }
+//
+//     async fn default_permissions<B, State>(
+//         self,
+//         state: State,
+//         guild: GuildId,
+//         usable: bool,
+//     ) -> ClientResult<ApplicationCommand>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send
+//     {
+//         let state = state.as_ref();
+//         let id = self.id();
+//         state.client.edit_guild_command(
+//             state.application_id(),
+//             guild,
+//             id,
+//             None,
+//             None,
+//             None,
+//             Some(usable),
+//         ).await
+//     }
+//
+//     async fn allow_roles<B, State, Roles, R>(
+//         self,
+//         state: State,
+//         guild: GuildId,
+//         roles: Roles,
+//     ) -> ClientResult<GuildApplicationCommandPermission>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send,
+//               Roles: IntoIterator<Item=R> + Send,
+//               R: Id<Id=RoleId>,
+//     {
+//         let permissions = roles.into_iter()
+//             .map(|id| id.id())
+//             .map(CommandPermissions::allow_role)
+//             .collect();
+//         self.edit_permissions(state, guild, permissions).await
+//     }
+//
+//     async fn disallow_roles<B, State, Roles, R>(
+//         self,
+//         state: State,
+//         guild: GuildId,
+//         roles: Roles,
+//     ) -> ClientResult<GuildApplicationCommandPermission>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send,
+//               Roles: IntoIterator<Item=R> + Send,
+//               R: Id<Id=RoleId>,
+//     {
+//         let permissions = roles.into_iter()
+//             .map(|id| id.id())
+//             .map(CommandPermissions::disallow_role)
+//             .collect();
+//         self.edit_permissions(state, guild, permissions).await
+//     }
+//
+//     async fn allow_users<B, State, Users, U>(
+//         self,
+//         state: State,
+//         guild: GuildId,
+//         users: Users,
+//     ) -> ClientResult<GuildApplicationCommandPermission>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send,
+//               Users: IntoIterator<Item=U> + Send,
+//               U: Id<Id=UserId>,
+//     {
+//         let permissions = users.into_iter()
+//             .map(|id| id.id())
+//             .map(CommandPermissions::allow_user)
+//             .collect();
+//         self.edit_permissions(state, guild, permissions).await
+//     }
+//
+//     async fn disallow_users<B, State, Users, U>(
+//         self,
+//         state: State,
+//         guild: GuildId,
+//         users: Users,
+//     ) -> ClientResult<GuildApplicationCommandPermission>
+//         where B: Send + Sync + 'static,
+//               State: AsRef<BotState<B>> + Send,
+//               Users: IntoIterator<Item=U> + Send,
+//               U: Id<Id=UserId>
+//     {
+//         let permissions = users.into_iter()
+//             .map(|id| id.id())
+//             .map(CommandPermissions::disallow_user)
+//             .collect();
+//         self.edit_permissions(state, guild, permissions).await
+//     }
+// }
 
-    async fn default_permissions<B, State>(
-        self,
-        state: State,
-        guild: GuildId,
-        usable: bool,
-    ) -> ClientResult<ApplicationCommand>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send
-    {
-        let state = state.as_ref();
-        let id = self.id();
-        state.client.edit_guild_command(
-            state.application_id(),
-            guild,
-            id,
-            None,
-            None,
-            None,
-            Some(usable),
-        ).await
-    }
-
-    async fn allow_roles<B, State, Roles, R>(
-        self,
-        state: State,
-        guild: GuildId,
-        roles: Roles,
-    ) -> ClientResult<GuildApplicationCommandPermission>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send,
-              Roles: IntoIterator<Item=R> + Send,
-              R: Id<Id=RoleId>,
-    {
-        let permissions = roles.into_iter()
-            .map(|id| id.id())
-            .map(CommandPermissions::allow_role)
-            .collect();
-        self.edit_permissions(state, guild, permissions).await
-    }
-
-    async fn disallow_roles<B, State, Roles, R>(
-        self,
-        state: State,
-        guild: GuildId,
-        roles: Roles,
-    ) -> ClientResult<GuildApplicationCommandPermission>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send,
-              Roles: IntoIterator<Item=R> + Send,
-              R: Id<Id=RoleId>,
-    {
-        let permissions = roles.into_iter()
-            .map(|id| id.id())
-            .map(CommandPermissions::disallow_role)
-            .collect();
-        self.edit_permissions(state, guild, permissions).await
-    }
-
-    async fn allow_users<B, State, Users, U>(
-        self,
-        state: State,
-        guild: GuildId,
-        users: Users,
-    ) -> ClientResult<GuildApplicationCommandPermission>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send,
-              Users: IntoIterator<Item=U> + Send,
-              U: Id<Id=UserId>,
-    {
-        let permissions = users.into_iter()
-            .map(|id| id.id())
-            .map(CommandPermissions::allow_user)
-            .collect();
-        self.edit_permissions(state, guild, permissions).await
-    }
-
-    async fn disallow_users<B, State, Users, U>(
-        self,
-        state: State,
-        guild: GuildId,
-        users: Users,
-    ) -> ClientResult<GuildApplicationCommandPermission>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send,
-              Users: IntoIterator<Item=U> + Send,
-              U: Id<Id=UserId>
-    {
-        let permissions = users.into_iter()
-            .map(|id| id.id())
-            .map(CommandPermissions::disallow_user)
-            .collect();
-        self.edit_permissions(state, guild, permissions).await
-    }
-}
-
-impl CommandPermsExt for ApplicationCommand {}
-
-impl CommandPermsExt for &mut ApplicationCommand {}
-
-impl CommandPermsExt for CommandId {}
+// impl CommandPermsExt for ApplicationCommand {}
+//
+// impl CommandPermsExt for &mut ApplicationCommand {}
+//
+// impl CommandPermsExt for CommandId {}
 
 // todo duplicate ^ here?
 // #[async_trait]

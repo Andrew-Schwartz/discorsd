@@ -6,10 +6,10 @@ use std::ops::Range;
 use thiserror::Error;
 
 use crate::BotState;
-use crate::commands::{DmSource, GuildSource, SlashCommandRaw};
+use crate::commands::SlashCommandRaw;
 use crate::http::{ClientError, DisplayClientError};
 use crate::model::ids::*;
-use crate::model::interaction::{InteractionSource, OptionValue};
+use crate::model::new_interaction::{DmUser, GuildUser, InteractionDataOption, InteractionUser};
 
 #[derive(Error, Debug)]
 pub enum BotError {
@@ -100,7 +100,7 @@ impl Display for AvalonError {
 pub struct CommandParseErrorInfo {
     pub name: String,
     pub id: CommandId,
-    pub source: InteractionSource,
+    pub source: InteractionUser,
     pub error: CommandParseError,
 }
 
@@ -108,7 +108,7 @@ impl CommandParseErrorInfo {
     #[allow(clippy::missing_panics_doc)]
     pub async fn display_error<B: Send + Sync>(&self, state: &BotState<B>) -> String {
         let source = match &self.source {
-            InteractionSource::Guild(GuildSource { id, member }) => if let Some(guild) = state.cache.guild(id).await {
+            InteractionUser::Guild(GuildUser { id, member, locale }) => if let Some(guild) = state.cache.guild(id).await {
                 format!(
                     "guild `{}` ({}), used by `{}` ({})",
                     guild.name.as_deref().unwrap_or("null"), guild.id, member.nick_or_name(), member.id()
@@ -119,13 +119,13 @@ impl CommandParseErrorInfo {
                     id, member.nick_or_name(), member.id()
                 )
             },
-            InteractionSource::Dm(DmSource { user }) => format!(
+            InteractionUser::Dm(DmUser { user }) => format!(
                 "dm with `{}#{}` ({})",
                 user.username, user.discriminator, user.id
             ),
         };
         match &self.source {
-            InteractionSource::Guild(GuildSource { id, .. }) => {
+            InteractionUser::Guild(GuildUser { id, .. }) => {
                 let guard = state.commands.read().await;
                 if let Some(guild_lock) = guard.get(id) {
                     let guard = guild_lock.read().await;
@@ -137,7 +137,7 @@ impl CommandParseErrorInfo {
                     )
                 }
             }
-            InteractionSource::Dm(_) => {
+            InteractionUser::Dm(_) => {
                 let global = state.global_commands.get().unwrap();
                 self.command_fail_message(&source, global.get(&self.id).copied())
             }
@@ -167,7 +167,7 @@ impl Display for CommandParseErrorInfo {
 
 #[derive(Debug)]
 pub enum CommandParseError {
-    BadType(OptionType),
+    NewBadType(NewOptionTypeError),
     UnknownOption(UnknownOption),
     EmptyOption(String),
     BadOrder(String, usize, Range<usize>),
@@ -187,8 +187,8 @@ pub enum CommandParseError {
 }
 
 #[derive(Debug)]
-pub struct OptionType {
-    pub value: OptionValue,
+pub struct NewOptionTypeError {
+    pub value: InteractionDataOption,
     pub desired: CommandOptionTypeParsed,
 }
 
@@ -199,25 +199,19 @@ pub struct OptionType {
 pub enum CommandOptionTypeParsed {
     String,
     I64,
-    U64,
+    F64,
     Usize,
     Boolean,
     UserId,
     ChannelId,
     RoleId,
-    MessageId,
-    GuildId,
+    MentionableId,
+    // todo Attachment?
 }
 
-impl From<OptionType> for CommandParseError {
-    fn from(ot: OptionType) -> Self {
-        Self::BadType(ot)
-    }
-}
-
-impl OptionValue {
-    pub const fn parse_error(self, desired_type: CommandOptionTypeParsed) -> OptionType {
-        OptionType { value: self, desired: desired_type }
+impl From<NewOptionTypeError> for CommandParseError {
+    fn from(ot: NewOptionTypeError) -> Self {
+        Self::NewBadType(ot)
     }
 }
 

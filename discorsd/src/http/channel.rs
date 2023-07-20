@@ -17,7 +17,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, InteractionResponse, MenuCommand};
+use crate::commands::{ButtonCommand, MenuCommand};
 use crate::http::{ClientError, DiscordClient};
 use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;
@@ -27,6 +27,7 @@ use crate::model::channel::{AnnouncementChannel, Channel, DmChannel, GroupDmChan
 use crate::model::components::ActionRow;
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
+use crate::model::interaction_response::InteractionResponse;
 use crate::model::message::*;
 use crate::model::permissions::Permissions;
 use crate::model::user::User;
@@ -776,7 +777,7 @@ impl CreateMessage {
         where B: Send + Sync + 'static,
               M: MenuCommand<Bot=B> + 'static,
     {
-        let menu = state.make_menu(Box::new(menu));
+        let menu = state.make_string_menu(Box::new(menu));
         self.components.push(ActionRow::select_menu(menu))
     }
 }
@@ -1282,31 +1283,37 @@ impl MessageWithFiles for WebhookMessage {
 impl MessageWithFiles for InteractionResponse {
     fn files(&mut self) -> Option<&mut HashSet<MessageAttachment>> {
         match self {
-            InteractionResponse::Pong
-            | InteractionResponse::DeferredChannelMessageWithSource
-            | InteractionResponse::DeferredUpdateMessage => None,
-            InteractionResponse::ChannelMessageWithSource(m)
-            | InteractionResponse::UpdateMessage(m) => Some(&mut m.files),
+            Self::ChannelMessageWithSource(m)
+            | Self::UpdateMessage(m) => Some(&mut m.files),
+            Self::Pong
+            | Self::DeferredChannelMessageWithSource
+            | Self::DeferredUpdateMessage
+            | Self::ApplicationCommandAutocompleteResult(_)
+            | Self::Modal(_) => None,
         }
     }
 
     fn embeds(&mut self) -> Option<&mut Vec<RichEmbed>> {
         match self {
-            InteractionResponse::Pong
-            | InteractionResponse::DeferredChannelMessageWithSource
-            | InteractionResponse::DeferredUpdateMessage => None,
-            InteractionResponse::ChannelMessageWithSource(m)
-            | InteractionResponse::UpdateMessage(m) => Some(&mut m.embeds),
+            Self::Pong
+            | Self::DeferredChannelMessageWithSource
+            | Self::DeferredUpdateMessage
+            | Self::ApplicationCommandAutocompleteResult(_)
+            | Self::Modal(_) => None,
+            Self::ChannelMessageWithSource(m)
+            | Self::UpdateMessage(m) => Some(&mut m.embeds),
         }
     }
 
     fn has_other_content(&self) -> bool {
         match self {
-            InteractionResponse::Pong
-            | InteractionResponse::DeferredChannelMessageWithSource
-            | InteractionResponse::DeferredUpdateMessage => false,
-            InteractionResponse::ChannelMessageWithSource(m)
-            | InteractionResponse::UpdateMessage(m) => !m.content.is_empty() || !m.embeds.is_empty(),
+            Self::Pong
+            | Self::DeferredChannelMessageWithSource
+            | Self::DeferredUpdateMessage => false,
+            Self::ChannelMessageWithSource(m)
+            | Self::UpdateMessage(m) => !m.content.is_empty() || !m.embeds.is_empty(),
+            Self::ApplicationCommandAutocompleteResult(_) => true,
+            Self::Modal(_) => true,
         }
     }
 }

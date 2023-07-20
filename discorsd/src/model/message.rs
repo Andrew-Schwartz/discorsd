@@ -4,16 +4,15 @@ use std::convert::TryFrom;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::model::channel::{ChannelType, Channel};
+use crate::model::channel::{Channel, ChannelType};
+use crate::model::components::ActionRow;
 use crate::model::emoji::Emoji;
-// use crate::model::guild::GuildMemberUserless;
 use crate::model::ids::*;
 pub use crate::model::ids::MessageId;
-use crate::model::interaction::MessageInteraction;
+use crate::model::new_interaction::InteractionType;
 use crate::model::Png;
 use crate::model::user::User;
 use crate::serde_utils::BoolExt;
-use crate::model::components::ActionRow;
 
 /// Represents a message sent in a channel within Discord.
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -91,7 +90,7 @@ pub struct Message {
     /// sent with Rich Presence-related chat embeds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application: Option<MessageApplication>,
-    /// 	if the message is a response to an Interaction, this is the id of the interaction's application
+    ///    if the message is a response to an Interaction, this is the id of the interaction's application
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_id: Option<ApplicationId>,
     /// reference data sent with crossposted messages and replies
@@ -292,6 +291,20 @@ impl Default for MessageFlags {
     }
 }
 
+/// This is sent on the message object when the message is a response to an Interaction.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageInteraction {
+    /// id of the interaction
+    pub id: InteractionId,
+    /// the type of interaction
+    #[serde(rename = "type")]
+    pub kind: InteractionType,
+    /// the name of the ApplicationCommand
+    pub name: String,
+    /// the user who invoked the interaction
+    pub user: User,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Sticker {
     /// id of the sticker
@@ -309,17 +322,17 @@ pub struct Sticker {
     pub preview_asset: Option<String>,
     /// type of sticker
     #[serde(rename = "type")]
-	pub kind: StickerType,
+    pub kind: StickerType,
     /// type of sticker format
     pub format_type: StickerFormatType,
     /// whether this guild sticker can be used, may be false due to loss of Server Boosts
-	pub available: Option<bool>,
+    pub available: Option<bool>,
     /// id of the guild that owns this sticker
-	pub guild_id: Option<GuildId>,
+    pub guild_id: Option<GuildId>,
     /// the user that uploaded the guild sticker
-	pub user: Option<User>,
+    pub user: Option<User>,
     /// the standard sticker's sort order within its pack
-	pub sort_value: Option<i32>,
+    pub sort_value: Option<i32>,
 }
 id_impl!(Sticker => StickerId);
 
@@ -356,19 +369,19 @@ pub struct StickerItem {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct StickerPackObject {
     /// id of the sticker pack
-	pub id: StickerPackId,
+    pub id: StickerPackId,
     /// the stickers in the pack
-	pub stickers: Vec<Sticker>,
+    pub stickers: Vec<Sticker>,
     /// name of the sticker pack
-	pub name: String,
+    pub name: String,
     /// id of the pack's SKU
-	pub sku_id: SkuId,
+    pub sku_id: SkuId,
     /// id of a sticker in the pack which is shown as the pack's icon
-	pub cover_sticker_id: Option<StickerId>,
+    pub cover_sticker_id: Option<StickerId>,
     /// description of the sticker pack
-	pub description: String,
+    pub description: String,
     /// id of the sticker pack's banner image
-	pub banner_asset_id: StickerId,
+    pub banner_asset_id: StickerId,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

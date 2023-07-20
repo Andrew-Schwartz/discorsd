@@ -202,80 +202,27 @@ serde_repr! {
     }
 }
 
-/// An action which will execute whenever a rule is triggered.
-#[derive(Debug, Clone, Copy)]
-pub enum Action {
-    /// blocks the content of a message according to the rule
-    BlockMessage,
-    /// logs user content to a specified channel
-    SendAlertMessage {
-        /// channel to which user content should be logged
-        channel: ChannelId,
-    },
-    /// timeout user for a specified duration
-    ///
-    /// A TIMEOUT action can only be set up for KEYWORD and MENTION_SPAM rules. The MODERATE_MEMBERS
-    /// permission is required to use the TIMEOUT action type.
-    Timeout {
-        /// timeout duration in seconds
+serde_num_tag! {
+    /// An action which will execute whenever a rule is triggered.
+    #[derive(Debug, Copy, Clone)]
+    pub enum Action = "type": u8 as ActionType {
+        /// blocks the content of a message according to the rule
+        (1) = BlockMessage,
+        /// logs user content to a specified channel
+        (2) = SendAlertMessage {
+           /// channel to which user content should be logged
+            channel: ChannelId,
+        },
+        /// timeout user for a specified duration
         ///
-        /// Maximum of 2419200 seconds (4 weeks)
-        duration: u32,
-    },
-}
-
-mod action_serde {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use serde::de::{Error, Unexpected};
-
-    use crate::model::ids::ChannelId;
-
-    use super::Action;
-
-    #[derive(Serialize, Deserialize)]
-    pub(super) struct RawAction {
-        #[serde(rename = "type")]
-        kind: u8,
-        metadata: Metadata,
-    }
-
-    #[derive(Serialize, Deserialize, Default)]
-    pub(super) struct Metadata {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        channel_id: Option<ChannelId>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        duration_seconds: Option<u32>,
-    }
-
-    impl Serialize for Action {
-        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-            let default = Default::default();
-            match self {
-                Self::BlockMessage => RawAction { kind: 1, metadata: default },
-                &Self::SendAlertMessage { channel } => RawAction {
-                    kind: 2,
-                    metadata: Metadata { channel_id: Some(channel), ..default },
-                },
-                &Self::Timeout { duration } => RawAction {
-                    kind: 3,
-                    metadata: Metadata { duration_seconds: Some(duration), ..default },
-                },
-            }.serialize(s)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for Action {
-        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-            let RawAction { kind, metadata: Metadata { channel_id, duration_seconds } } = RawAction::deserialize(d)?;
-            match kind {
-                1 => Ok(Self::BlockMessage),
-                2 => channel_id.map(|channel| Self::SendAlertMessage { channel })
-                    .ok_or_else(|| D::Error::missing_field("Action::SendAlertMessage::channel_id")),
-                3 => duration_seconds.map(|duration| Self::Timeout { duration })
-                    .ok_or_else(|| D::Error::missing_field("Action::Timeout::duration_seconds")),
-                unknown => Err(D::Error::invalid_value(Unexpected::Unsigned(unknown as _), &"1, 2, or 3")),
-            }
-        }
+        /// A TIMEOUT action can only be set up for KEYWORD and MENTION_SPAM rules. The MODERATE_MEMBERS
+        /// permission is required to use the TIMEOUT action type.
+        (3) = Timeout {
+            /// timeout duration in seconds
+            ///
+            /// Maximum of 2419200 seconds (4 weeks)
+            duration: u32,
+        },
     }
 }
 

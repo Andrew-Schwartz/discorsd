@@ -8,14 +8,6 @@ use serde::de::DeserializeOwned;
 use serde_json::Error as JsonError;
 use serde_json::error::Category;
 
-pub fn null_as_t<'de, D, T>(d: D) -> Result<T, D::Error>
-    where D: Deserializer<'de>,
-          T: Default,
-          Option<T>: Deserialize<'de> {
-    Ok(<Option<T>>::deserialize(d)?
-        .unwrap_or_default())
-}
-
 ///
 #[derive(Debug)]
 pub enum Error {
@@ -142,9 +134,8 @@ impl NiceResponseJson for Response {
     }
 }
 
-pub fn default_true() -> bool { true }
-
 pub trait BoolExt {
+    fn default_true() -> bool { true }
     fn is_true(&self) -> bool;
     fn is_false(&self) -> bool;
 }
@@ -153,4 +144,29 @@ impl BoolExt for bool {
     fn is_true(&self) -> bool { *self }
 
     fn is_false(&self) -> bool { !*self }
+}
+
+pub fn null_as_t<'de, D, T>(d: D) -> Result<T, D::Error>
+    where D: Deserializer<'de>,
+          T: Default,
+          Option<T>: Deserialize<'de> {
+    Ok(<Option<T>>::deserialize(d)?
+        .unwrap_or_default())
+}
+
+/// All
+pub trait SkipUnit {
+    fn should_skip(&self) -> bool;
+}
+
+impl SkipUnit for () {
+    fn should_skip(&self) -> bool {
+        true
+    }
+}
+
+impl<T> SkipUnit for Vec<T> {
+    fn should_skip(&self) -> bool {
+        self.is_empty()
+    }
 }

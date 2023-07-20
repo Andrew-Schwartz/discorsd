@@ -8,15 +8,14 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use crate::cache::{Cache, IdMap, Update};
-use crate::commands::{CommandPermissions, MessageInteraction};
 use crate::model::auto_moderation::{Action, AutoModRule, TriggerType};
 use crate::model::channel::{Channel, ChannelType, Thread, ThreadMember};
 use crate::model::components::ActionRow;
 use crate::model::emoji::{CustomEmoji, Emoji};
 use crate::model::guild::{ExplicitFilterLevel, Guild, GuildFeature, GuildMember, Integration, MfaLevel, NotificationLevel, PremiumTier, SystemChannelFlags, UnavailableGuild, VerificationLevel};
 use crate::model::ids::*;
-use crate::model::interaction::{ApplicationCommand, Interaction};
-use crate::model::message::{Attachment, ChannelMention, ChannelMessageId, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageReference, MessageType, Reaction, StickerItem};
+use crate::model::message::{Attachment, ChannelMention, ChannelMessageId, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageInteraction, MessageReference, MessageType, Reaction, StickerItem};
+use crate::model::new_interaction::{ApplicationCommandData, Interaction, InteractionData};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::model::voice::VoiceState;
@@ -282,7 +281,7 @@ impl Update for ChannelCreate {
                 .entry(guild)
                 .and_modify(|guild| guild.channels.insert(channel.clone()));
         }
-        cache.channel_types.write().await.insert(channel.id(), channel.channel_type());
+        cache.channel_types.write().await.insert(channel.id(), channel.variant_type());
         match channel {
             Channel::Text(text) => {
                 cache.channels.write().await.insert(text.clone());
@@ -423,37 +422,36 @@ pub struct ChannelPinsUpdate {
 #[async_trait]
 impl Update for ChannelPinsUpdate {
     async fn update(&self, cache: &Cache) {
-        use ChannelType::*;
         let Self { guild_id, channel_id, last_pin_timestamp } = &self;
         let last_pin_timestamp = *last_pin_timestamp;
         match cache.channel_types.read().await.get(channel_id) {
-            Some(GuildText) => {
+            Some(ChannelType::Text) => {
                 cache.channels.write().await.entry(&channel_id)
                     .and_modify(|channel| {
                         channel.last_pin_timestamp = last_pin_timestamp;
                     });
             }
-            Some(Dm) => {
+            Some(ChannelType::Dm) => {
                 cache.dms.write().await.1.entry(&channel_id)
                     .and_modify(|channel| {
                         channel.last_pin_timestamp = last_pin_timestamp;
                     });
             }
-            Some(GuildAnnouncement) => {
+            Some(ChannelType::Announcement) => {
                 cache.news.write().await.entry(&channel_id)
                     .and_modify(|channel| {
                         channel.last_pin_timestamp = last_pin_timestamp;
                     });
             }
-            Some(GuildVoice) | Some(GuildCategory) => {}
-            Some(GroupDm) | None => {}
+            Some(ChannelType::Voice) | Some(ChannelType::Category) => {}
+            Some(ChannelType::GroupDm) | None => {}
             // todo
-            Some(AnnouncementThread) => {}
-            Some(PublicThread) => {}
-            Some(PrivateThread) => {}
-            Some(GuildStageVoice) => {}
-            Some(GuildDirectory) => {}
-            Some(GuildForum) => {}
+            Some(ChannelType::AnnouncementThread) => {}
+            Some(ChannelType::PublicThread) => {}
+            Some(ChannelType::PrivateThread) => {}
+            Some(ChannelType::GuildStageVoice) => {}
+            Some(ChannelType::GuildDirectory) => {}
+            Some(ChannelType::GuildForum) => {}
         }
         if let Some(guild_id) = guild_id {
             cache.guilds.write().await.entry(guild_id)
@@ -504,7 +502,7 @@ impl Update for GuildCreate {
             let mut guard = cache.channel_types.write().await;
             self.guild.channels.iter()
                 .for_each(|channel| {
-                    guard.insert(channel.id(), channel.channel_type());
+                    guard.insert(channel.id(), channel.variant_type());
                     match channel {
                         Channel::Text(text) => {
                             let mut text = text.clone();
@@ -1010,7 +1008,7 @@ impl Update for MessageCreate {
             .get(&self.message.channel)
             .copied();
         match channel_type {
-            Some(ChannelType::GuildText) => {
+            Some(ChannelType::Text) => {
                 // todo should this just unwrap?
                 if let Some(channel) = cache.channels.write().await.get_mut(&self.message.channel) {
                     channel.last_message_id = Some(self.message.id);
@@ -1021,14 +1019,14 @@ impl Update for MessageCreate {
                     dm.last_message_id = Some(self.message.id);
                 }
             }
-            Some(ChannelType::GuildAnnouncement) => {
+            Some(ChannelType::Announcement) => {
                 if let Some(news) = cache.news.write().await.get_mut(&self.message.channel) {
                     news.last_message_id = Some(self.message.id);
                 }
             }
-            Some(ChannelType::GuildVoice)
+            Some(ChannelType::Voice)
             | Some(ChannelType::GroupDm)
-            | Some(ChannelType::GuildCategory)
+            | Some(ChannelType::Category)
             | None => {}
             // todo
             Some(ChannelType::AnnouncementThread) => {}
@@ -1188,20 +1186,19 @@ pub struct MessageDelete {
 #[async_trait]
 impl Update for MessageDelete {
     async fn update(&self, cache: &Cache) {
-        use ChannelType::*;
         cache.messages.write().await.remove(self.id);
         match cache.channel_types.read().await.get(&self.channel_id) {
-            Some(GuildText) => {
+            Some(ChannelType::Text) => {
                 if let Some(channel) = cache.channels.write().await.get_mut(self.channel_id) {
                     channel.last_message_id = channel.last_message_id.filter(|&id| id != self.id);
                 }
             }
-            Some(Dm) => {
+            Some(ChannelType::Dm) => {
                 if let Some(channel) = cache.dms.write().await.1.get_mut(self.channel_id) {
                     channel.last_message_id = channel.last_message_id.filter(|&id| id != self.id);
                 }
             }
-            Some(GuildAnnouncement) => {
+            Some(ChannelType::Announcement) => {
                 if let Some(channel) = cache.news.write().await.get_mut(self.channel_id) {
                     channel.last_message_id = channel.last_message_id.filter(|&id| id != self.id);
                 }
@@ -1581,14 +1578,16 @@ pub struct InteractionCreate {
 
 #[async_trait]
 impl Update for InteractionCreate {
-    async fn update(&self, _cache: &Cache) {}
+    async fn update(&self, _cache: &Cache) {
+        println!("self = {:#?}", self);
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApplicationCommandCreate {
     pub guild_id: GuildId,
     #[serde(flatten)]
-    pub command: ApplicationCommand,
+    pub command: InteractionData<ApplicationCommandData>,
 }
 
 #[async_trait]
@@ -1600,7 +1599,7 @@ impl Update for ApplicationCommandCreate {
 pub struct ApplicationCommandUpdate {
     pub guild_id: GuildId,
     #[serde(flatten)]
-    pub command: ApplicationCommand,
+    pub command: InteractionData<ApplicationCommandData>,
 }
 
 #[async_trait]
@@ -1612,7 +1611,7 @@ impl Update for ApplicationCommandUpdate {
 pub struct ApplicationCommandDelete {
     pub guild_id: GuildId,
     #[serde(flatten)]
-    pub command: ApplicationCommand,
+    pub command: InteractionData<ApplicationCommandData>,
 }
 
 #[async_trait]
@@ -1626,7 +1625,8 @@ pub struct ApplicationCommandPermissionsUpdate {
     pub guild_id: GuildId,
     pub id: CommandId,
     // todo it could also be GuildPermissions :)
-    pub permissions: Vec<CommandPermissions>,
+    // todo
+    // pub permissions: Vec<CommandPermissions>,
 }
 
 #[async_trait]

@@ -17,47 +17,75 @@ pub fn enum_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
     let branches = variants.branches();
     let variants_array = variants.array();
     let default_impl = variants.default_impl(ty);
+    let display_branches = variants.display_branches();
 
     let tokens = quote! {
+        impl ::std::fmt::Display for #ty {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                match self {
+                    #display_branches
+                }
+            }
+        }
+
         impl ::discorsd::commands::OptionCtor for #ty {
-            type Data = &'static str;
+            type Data = String;
             const ARG_NAME: &'static str = stringify!(#ty);
 
             fn option_ctor(
-                cdo: ::discorsd::commands::CommandDataOption<Self::Data>
-            ) -> ::discorsd::commands::DataOption {
-                ::discorsd::commands::DataOption::String(cdo)
+                string_data: ::discorsd::model::new_command::OptionData<Self::Data>
+            ) -> ::discorsd::model::new_command::CommandDataOption {
+                ::discorsd::model::new_command::CommandDataOption::String(string_data)
             }
         }
 
         impl<C: ::discorsd::commands::SlashCommandRaw> ::discorsd::model::commands::CommandData<C> for #ty {
             // all choice enums are built from a ValueOption
-            type Options = ::discorsd::model::interaction::ValueOption;
+            type Options = ::discorsd::model::new_interaction::InteractionDataOption;
 
             fn from_options(
-                Self::Options { name, lower: value }: Self::Options,
+                option: Self::Options,
             ) -> ::std::result::Result<Self, ::discorsd::errors::CommandParseError> {
                 use ::discorsd::errors::*;
-                let value = value.string()?;
-                match value.as_str() {
-                    #branches
-                    _ => ::std::result::Result::Err(CommandParseError::UnknownOption(UnknownOption {
-                        name: value, options: &#variants_array
-                    }))
+                use ::discorsd::model::new_interaction::*;
+                match option {
+                    InteractionDataOption::String(
+                        DataOption {
+                            data: HasValue { value },
+                            ..
+                        }
+                    ) => match value.as_str() {
+                        #branches
+                        _ => ::std::result::Result::Err(CommandParseError::UnknownOption(UnknownOption {
+                            name: value, options: &#variants_array
+                        }))
+                    }
+                    value => ::std::result::Result::Err(CommandParseError::NewBadType(NewOptionTypeError {
+                        value,
+                        desired: CommandOptionTypeParsed::String,
+                    })),
                 }
+
+                // let value = value.string()?;
+                // match value.as_str() {
+                //     #branches
+                //     _ => ::std::result::Result::Err(CommandParseError::UnknownOption(UnknownOption {
+                //         name: value, options: &#variants_array
+                //     }))
+                // }
             }
 
-            type VecArg = ::discorsd::commands::DataOption;
+            type VecArg = ::discorsd::model::new_command::CommandDataOption;
 
             fn make_args(_: &C) -> Vec<Self::VecArg> { Vec::new() }
-            // fn make_choices() -> Vec<::discorsd::model::interaction::CommandChoice<&'static str>> {
-            //     vec![#choices]
-            // }
+
             type Choice = Self;
-            fn make_choices() -> Vec<Self> {
+            fn make_choices() -> Vec<Self::Choice> {
                 vec![#choices]
             }
-            fn into_command_choice(self) -> ::discorsd::commands::CommandChoice<&'static str> {
+            // all choice enums give String as the choice
+            type ChoicePrimitive = String;
+            fn into_command_choice(self) -> ::discorsd::model::new_command::Choice<Self::ChoicePrimitive> {
                 match self {
                     #to_command_choice_branches
                 }
@@ -103,6 +131,15 @@ impl From<syn::Variant> for Variant {
 struct Enum(Vec<Variant>);
 
 impl Enum {
+    // fn choices(&self) -> TokenStream2 {
+    //     let choices = self.0.iter().map(|v| {
+    //         let name = v.choice.as_ref().map_or_else(|| v.ident.to_string(), LitStr::value);
+    //         let value = v.name();
+    //         quote! { ::discorsd::model::new_command::Choice::new(#name, #value.into())  }
+    //     });
+    //     quote! { #(#choices),* }
+    // }
+
     fn choices(&self) -> TokenStream2 {
         let choices = self.0.iter().map(|v| {
             let ident = &v.ident;
@@ -116,10 +153,20 @@ impl Enum {
             let ident = &v.ident;
             let name = v.choice.as_ref().map_or_else(|| v.ident.to_string(), LitStr::value);
             let value = v.name();
-            quote! { Self::#ident => ::discorsd::model::interaction::CommandChoice::new(#name, #value) }
+            quote! { Self::#ident => ::discorsd::model::new_command::Choice::new(#name, #value.to_string()) }
         });
         quote! { #(#branches),* }
     }
+
+    // fn to_command_choice_branches(&self) -> TokenStream2 {
+    //     let branches = self.0.iter().map(|v| {
+    //         let ident = &v.ident;
+    //         let name = v.choice.as_ref().map_or_else(|| v.ident.to_string(), LitStr::value);
+    //         let value = v.name();
+    //         quote! { Self::#ident => ::discorsd::model::new_command::Choice::new(#name.to_string(), #value.to_string()) }
+    //     });
+    //     quote! { #(#branches),* }
+    // }
 
     fn branches(&self) -> TokenStream2 {
         let branches = self.0.iter().map(|v| {
@@ -159,6 +206,16 @@ impl Enum {
                 )
             }
         }
+    }
+
+    fn display_branches(&self) -> TokenStream2 {
+        let branches = self.0.iter().map(|v| {
+            let display = v.choice.as_ref()
+                .map_or_else(|| v.ident.to_string(), LitStr::value);
+            let ident = &v.ident;
+            quote! { Self::#ident => f.write_str(#display) }
+        });
+        quote! { #(#branches),* }
     }
 }
 

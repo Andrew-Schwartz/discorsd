@@ -25,6 +25,8 @@ pub struct Guild {
     /// icon hash
     pub icon: Option<String>,
     /// icon hash, returned when in the template object
+    pub icon_hash: Option<String>,
+    /// splash hash
     pub splash: Option<String>,
     /// discovery splash hash; only present for guilds with the "DISCOVERABLE" feature
     pub discovery_splash: Option<String>,

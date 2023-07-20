@@ -13,7 +13,7 @@ use crate::model::ids::sealed::IsId;
 const DISCORD_EPOCH: u64 = 1_420_070_400_000;
 
 macro_rules! id_impl {
-    ($($id:tt,)+) => {
+    ($($id:tt),+ $(,)?) => {
         $(
             #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
             pub struct $id(pub u64);
@@ -58,9 +58,29 @@ macro_rules! id_impl {
 
             impl<'de> Deserialize<'de> for $id {
                 fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-                    let id = <&'de str>::deserialize(d)?;
-                    let id = id.parse().map_err(D::Error::custom)?;
-                    Ok(id)
+                    struct IdVisitor;
+
+                    impl<'de> ::serde::de::Visitor<'de> for IdVisitor {
+                        type Value = $id;
+
+                        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                            write!(f, "a string ({})", stringify!($id))
+                        }
+
+                        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: Error {
+                            v.parse().map_err(E::custom)
+                        }
+
+                        fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E> where E: Error {
+                            v.parse().map_err(E::custom)
+                        }
+
+                        fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: Error {
+                            v.parse().map_err(E::custom)
+                        }
+                    }
+
+                    d.deserialize_str(IdVisitor)
                 }
             }
 
@@ -82,6 +102,7 @@ macro_rules! id_impl {
     };
 }
 
+// todo make it so I can add docs
 id_impl!(
     GuildId,
     ChannelId,
@@ -101,6 +122,8 @@ id_impl!(
     TeamId,
     TagId,
     RuleId,
+    // User or Role (but not channel)
+    MentionableId,
 );
 
 mod sealed {
@@ -173,6 +196,7 @@ macro_rules! id_eq {
     ($id:ty) => {
         impl PartialEq for $id {
             fn eq(&self, other: &Self) -> bool {
+                use $crate::model::ids::Id;
                 self.id() == other.id()
             }
         }

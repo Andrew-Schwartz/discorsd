@@ -161,7 +161,11 @@ impl Route {
             cache.user(user).await.map_or_else(|| user.to_string(), |u| u.username)
         };
         let command = |command: CommandId| async move {
-            cache.command(command).await.map_or_else(|| command.to_string(), |c| c.name)
+            cache.command(command).await
+                .map_or_else(
+                    || command.to_string(),
+                    |c| c.data.name().to_string()
+                )
         };
         let guild = |guild: GuildId| async move {
             cache.guild(guild).await

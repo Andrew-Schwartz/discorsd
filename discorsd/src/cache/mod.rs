@@ -13,8 +13,8 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 use crate::model::channel::{CategoryChannel, Channel, ChannelType, DmChannel, AnnouncementChannel, TextChannel};
 use crate::model::guild::{Guild, GuildMember, UnavailableGuild};
 use crate::model::ids::*;
-use crate::model::interaction::ApplicationCommand;
 use crate::model::message::{Message, Reaction};
+use crate::model::new_interaction::{ApplicationCommandData, InteractionData};
 use crate::model::permissions::Role;
 use crate::model::user::User;
 use crate::shard::dispatch::PartialApplication;
@@ -42,7 +42,7 @@ pub struct Cache {
     pub(crate) messages: RwLock<IdMap<Message>>,
     pub(crate) interaction_responses: RwLock<HashMap<InteractionId, Message>>,
 
-    pub(crate) commands: RwLock<IdMap<ApplicationCommand>>,
+    pub(crate) commands: RwLock<IdMap<InteractionData<ApplicationCommandData>>>,
 }
 
 impl Cache {
@@ -85,12 +85,12 @@ impl Cache {
         let id = id.id();
         let channel_type = self.channel_types.read().await.get(&id).copied();
         match channel_type {
-            Some(ChannelType::GuildText) => self.channels.read().await.get(&id).cloned().map(Channel::Text),
+            Some(ChannelType::Text) => self.channels.read().await.get(&id).cloned().map(Channel::Text),
             Some(ChannelType::Dm) => self.dms.read().await.1.get(&id).cloned().map(Channel::Dm),
-            Some(ChannelType::GuildCategory) => self.categories.read().await.get(&id).cloned().map(Channel::Category),
-            Some(ChannelType::GuildAnnouncement) => self.news.read().await.get(&id).cloned().map(Channel::Announcement),
+            Some(ChannelType::Category) => self.categories.read().await.get(&id).cloned().map(Channel::Category),
+            Some(ChannelType::Announcement) => self.news.read().await.get(&id).cloned().map(Channel::Announcement),
             // Some(ChannelType::GuildStore) => self.stores.read().await.get(&id).cloned().map(Channel::Store),
-            Some(ChannelType::GroupDm) | Some(ChannelType::GuildVoice) | None => None,
+            Some(ChannelType::GroupDm) | Some(ChannelType::Voice) | None => None,
             // todo
             Some(ChannelType::AnnouncementThread) => None,
             Some(ChannelType::PublicThread) => None,
@@ -154,7 +154,7 @@ impl Cache {
             .expect("the guild exists")
     }
 
-    pub async fn command<C: Id<Id=CommandId> + Send>(&self, id: C) -> Option<ApplicationCommand> {
+    pub async fn command<C: Id<Id=CommandId> + Send>(&self, id: C) -> Option<InteractionData<ApplicationCommandData>> {
         self.commands.read().await.get(id).cloned()
     }
 
@@ -221,7 +221,7 @@ pub struct DebugCache<'a> {
     // stores: RwLockReadGuard<'a, IdMap<StoreChannel>>,
     messages: RwLockReadGuard<'a, IdMap<Message>>,
     interaction_responses: RwLockReadGuard<'a, HashMap<InteractionId, Message>>,
-    commands: RwLockReadGuard<'a, IdMap<ApplicationCommand>>,
+    commands: RwLockReadGuard<'a, IdMap<InteractionData<ApplicationCommandData>>>,
 }
 
 /// A map of objects, with keys given by the object's id

@@ -22,16 +22,16 @@ use once_cell::sync::OnceCell;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::cache::Cache;
-use crate::commands::{ApplicationCommand, ButtonCommand, InteractionData, MenuCommandRaw, MenuSelectData, ReactionCommand, SlashCommand, SlashCommandRaw};
+use crate::commands::{ButtonCommand, MenuCommandRaw, MenuSelectData, ReactionCommand, SlashCommand, SlashCommandRaw};
 use crate::errors::BotError;
-use crate::http::{ClientResult, DiscordClient};
-use crate::http::guild::CommandPermsExt;
+use crate::http::DiscordClient;
 use crate::model::commands::{ButtonPressData, InteractionUse, SlashCommandData};
 use crate::model::components::{Button, ComponentId, SelectMenu};
 use crate::model::guild::{Guild, Integration};
 use crate::model::ids::*;
-use crate::model::interaction::Interaction;
 use crate::model::message::Message;
+use crate::model::new_interaction;
+use crate::model::new_interaction::{ApplicationCommandData, MenuData, MessageComponentData};
 use crate::model::permissions::Role;
 use crate::model::user::User;
 use crate::shard;
@@ -85,13 +85,14 @@ impl<B: Send + Sync + 'static> BotState<B> {
         component
     }
 
-    pub(crate) fn make_menu(&self, menu: Box<dyn MenuCommandRaw<Bot=B>>) -> SelectMenu {
+    pub(crate) fn make_string_menu(&self, menu: Box<dyn MenuCommandRaw<Bot=B>>) -> SelectMenu<String> {
         let count = self.count.fetch_add(1, Ordering::Relaxed);
         let id: ComponentId = count.to_string().into();
         let (min_values, max_values) = menu.num_values();
         let component = SelectMenu {
             custom_id: id.clone(),
             options: menu.options(),
+            channel_types: (),
             placeholder: menu.placeholder(),
             min_values,
             max_values,
@@ -212,32 +213,33 @@ impl<B: Send + Sync> BotState<B> {
             .unwrap_or_else(|| panic!("{} exists", C::NAME))
     }
 
-    /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
-    /// for command `C` in this `guild`, meaning that everyone in the guild will be able to use it.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the bot is not in this `guild`, or if the command `C` does not exist.
-    /// in this guild.
-    pub async fn enable_command<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> ClientResult<ApplicationCommand> {
-        self.command_id::<C>(guild).await
-            .default_permissions(self, guild, true).await
-    }
-
-
-    /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
-    /// for command `C` in this `guild`, meaning that no one in the guild will be able to use it
-    /// unless the command's permissions were edited to allow their [`UserId`](UserId) or a
-    /// [`RoleId`] they have.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the bot is not in this `guild`, or if the command `C` does not exist.
-    /// in this guild.
-    pub async fn disable_command<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> ClientResult<ApplicationCommand> {
-        self.command_id::<C>(guild).await
-            .default_permissions(self, guild, false).await
-    }
+    // bots can't use these
+    // /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
+    // /// for command `C` in this `guild`, meaning that everyone in the guild will be able to use it.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Panics if the bot is not in this `guild`, or if the command `C` does not exist.
+    // /// in this guild.
+    // pub async fn enable_command<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> ClientResult<ApplicationCommand> {
+    //     self.command_id::<C>(guild).await
+    //         .default_permissions(self, guild, true).await
+    // }
+    //
+    //
+    // /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
+    // /// for command `C` in this `guild`, meaning that no one in the guild will be able to use it
+    // /// unless the command's permissions were edited to allow their [`UserId`](UserId) or a
+    // /// [`RoleId`] they have.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Panics if the bot is not in this `guild`, or if the command `C` does not exist.
+    // /// in this guild.
+    // pub async fn disable_command<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> ClientResult<ApplicationCommand> {
+    //     self.command_id::<C>(guild).await
+    //         .default_permissions(self, guild, false).await
+    // }
 
     /// Get a mutable [`SlashCommand`](SlashCommand) `C` by type.
     ///
@@ -338,7 +340,7 @@ pub trait Bot: Send + Sync + Sized {
 
     async fn message_update(&self, message: Message, state: Arc<BotState<Self>>, updates: MessageUpdate) -> Result<(), BotError> { Ok(()) }
 
-    async fn interaction(&self, interaction: Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
+    async fn interaction(&self, interaction: new_interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
         Self::handle_interaction(interaction, state).await
     }
 
@@ -365,77 +367,172 @@ pub trait BotExt: Bot + 'static {
 
     /// Respond to an interaction with the matching [SlashCommand]. Should likely be used in the
     /// [Bot::interaction](Bot::interaction) method.
-    async fn handle_interaction(interaction: Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
-        let Interaction {
-            id,
-            application_id,
-            kind: _kind,
-            data,
-            source,
-            channel_id,
-            token
-        } = interaction;
-        match data {
-            InteractionData::ApplicationCommand(data) => {
-                let interaction = InteractionUse::new(
-                    id,
+    async fn handle_interaction(interaction: new_interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
+        println!("interaction = {:#?}", interaction);
+        match interaction {
+            new_interaction::Interaction::Ping => println!("PING!"),
+            new_interaction::Interaction::ApplicationCommand(data) => {
+                let new_interaction::InteractionData {
+                    id: interaction_id,
                     application_id,
-                    SlashCommandData { command: data.id, command_name: data.name },
-                    channel_id,
-                    source,
                     token,
-                );
-                let command = state.global_commands.get().unwrap().get(&data.id);
-                if let Some(command) = command {
-                    command.run(Arc::clone(&state), interaction, data.options).await?;
-                } else {
-                    let command = {
-                        let guard = state.commands.read().await;
-                        // todo fix this unwrap lol
-                        let commands = guard.get(&interaction.guild().unwrap()).unwrap().read().await;
-                        commands.get(&data.id).cloned()
-                    };
-                    if let Some(command) = command {
-                        command.run(Arc::clone(&state), interaction, data.options).await?;
+                    channel_id,
+                    data,
+                    message: _,
+                    user,
+                    app_permissions,
+                    locale
+                } = data;
+                match data {
+                    ApplicationCommandData::SlashCommand { id, name, options } => {
+                        let interaction = InteractionUse::new(
+                            interaction_id,
+                            application_id,
+                            SlashCommandData { command: id, command_name: name },
+                            channel_id,
+                            user,
+                            token,
+                        );
+                        let global_command = state.global_commands.get().unwrap().get(&id);
+                        if let Some(command) = global_command {
+                            command.run(Arc::clone(&state), interaction, options).await?;
+                        } else {
+                            let command = {
+                                let guard = state.commands.read().await;
+                                // todo fix this unwrap lol
+                                let commands = guard.get(&interaction.guild().unwrap()).unwrap().read().await;
+                                commands.get(&id).cloned()
+                            };
+                            if let Some(command) = command {
+                                command.run(Arc::clone(&state), interaction, options).await?;
+                            }
+                        }
                     }
+                    ApplicationCommandData::UserCommand { .. } => todo!(),
+                    ApplicationCommandData::MessageCommand { .. } => todo!(),
                 }
             }
-            InteractionData::MessageComponentCommand(data) => {
-                match data.component_type {
-                    2 => {
-                        let command = state.buttons.read().unwrap().get(&data.custom_id).cloned();
+            new_interaction::Interaction::MessageComponent(data) => {
+                let new_interaction::InteractionData {
+                    id: interaction_id,
+                    application_id,
+                    token,
+                    channel_id,
+                    data,
+                    message,
+                    user,
+                    app_permissions,
+                    locale
+                } = data;
+                match data {
+                    MessageComponentData::Button { custom_id } => {
+                        let command = state.buttons.read().unwrap().get(&custom_id).cloned();
                         if let Some(command) = command {
                             let interaction = InteractionUse::new(
-                                id,
+                                interaction_id,
                                 application_id,
-                                ButtonPressData { custom_id: data.custom_id },
+                                ButtonPressData { custom_id },
                                 channel_id,
-                                source,
+                                user,
                                 token,
                             );
                             command.run(Arc::clone(&state), interaction).await?;
                         }
                     }
-                    3 => {
-                        let command = state.menus.read().unwrap().get(&data.custom_id).cloned();
+                    MessageComponentData::StringMenu(MenuData { custom_id, values }) => {
+                        let command = state.menus.read().unwrap().get(&custom_id).cloned();
                         if let Some(command) = command {
                             let interaction = InteractionUse::new(
-                                id,
+                                interaction_id,
                                 application_id,
-                                MenuSelectData { custom_id: data.custom_id, values: data.values },
+                                MenuSelectData { custom_id, values },
                                 channel_id,
-                                source,
+                                user,
                                 token,
                             );
                             command.run(Arc::clone(&state), interaction).await?;
                         }
                     }
-                    _bad => todo!(),
+                    MessageComponentData::TextInput => todo!(),
+                    MessageComponentData::UserMenu(_) => todo!(),
+                    MessageComponentData::RoleMenu(_) => todo!(),
+                    MessageComponentData::MentionableMenu(_) => todo!(),
+                    MessageComponentData::ChannelMenu(_) => todo!(),
                 }
             }
-            InteractionData::MessageCommand { .. } => todo!(),
-            InteractionData::UserCommand { .. } => todo!(),
+            new_interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),
+            new_interaction::Interaction::ModalSubmit(_) => todo!(),
         }
+        // let Interaction {
+        //     id,
+        //     application_id,
+        //     kind: _kind,
+        //     data,
+        //     source,
+        //     channel_id,
+        //     token,
+        // } = interaction;
+        // match data {
+        //     InteractionData::ApplicationCommand(data) => {
+        //         let interaction = InteractionUse::new(
+        //             id,
+        //             application_id,
+        //             SlashCommandData { command: data.id, command_name: data.name },
+        //             channel_id,
+        //             source,
+        //             token,
+        //         );
+        //         let command = state.global_commands.get().unwrap().get(&data.id);
+        //         if let Some(command) = command {
+        //             command.run(Arc::clone(&state), interaction, data.options).await?;
+        //         } else {
+        //             let command = {
+        //                 let guard = state.commands.read().await;
+        //                 // todo fix this unwrap lol
+        //                 let commands = guard.get(&interaction.guild().unwrap()).unwrap().read().await;
+        //                 commands.get(&data.id).cloned()
+        //             };
+        //             if let Some(command) = command {
+        //                 command.run(Arc::clone(&state), interaction, data.options).await?;
+        //             }
+        //         }
+        //     }
+        //     InteractionData::MessageComponentCommand(data) => {
+        //         match data.component_type {
+        //             2 => {
+        //                 let command = state.buttons.read().unwrap().get(&data.custom_id).cloned();
+        //                 if let Some(command) = command {
+        //                     let interaction = InteractionUse::new(
+        //                         id,
+        //                         application_id,
+        //                         ButtonPressData { custom_id: data.custom_id },
+        //                         channel_id,
+        //                         source,
+        //                         token,
+        //                     );
+        //                     command.run(Arc::clone(&state), interaction).await?;
+        //                 }
+        //             }
+        //             3 => {
+        //                 let command = state.menus.read().unwrap().get(&data.custom_id).cloned();
+        //                 if let Some(command) = command {
+        //                     let interaction = InteractionUse::new(
+        //                         id,
+        //                         application_id,
+        //                         MenuSelectData { custom_id: data.custom_id, values: data.values },
+        //                         channel_id,
+        //                         source,
+        //                         token,
+        //                     );
+        //                     command.run(Arc::clone(&state), interaction).await?;
+        //                 }
+        //             }
+        //             _bad => todo!(),
+        //         }
+        //     }
+        //     InteractionData::MessageCommand { .. } => todo!(),
+        //     InteractionData::UserCommand { .. } => todo!(),
+        // }
 
         Ok(())
     }

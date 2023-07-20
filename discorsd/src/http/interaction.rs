@@ -5,14 +5,15 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 
-use crate::commands::{CommandPermissions, GuildApplicationCommandPermission, GuildCommandPermissions};
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::http::routes::Route::*;
 use crate::model::ids::*;
-use crate::model::interaction::{ApplicationCommand, Command, InteractionMessage, InteractionResponse, TopLevelOption};
-pub use crate::model::interaction::message;
+use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{AllowedMentions, Message};
+use crate::model::new_command;
+use crate::model::new_command::Command;
+use crate::model::new_interaction::{ApplicationCommandData, InteractionData};
 
 impl DiscordClient {
     /// Fetch all of the global commands for your application.
@@ -20,7 +21,7 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `Vec<ApplicationCommand>`
-    pub async fn get_global_commands(&self, application: ApplicationId) -> ClientResult<Vec<ApplicationCommand>> {
+    pub async fn get_global_commands(&self, application: ApplicationId) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
         self.get(GetGlobalCommands(application)).await
     }
 
@@ -36,7 +37,7 @@ impl DiscordClient {
         &self,
         application: ApplicationId,
         command: Command,
-    ) -> ClientResult<ApplicationCommand> {
+    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
         self.post(CreateGlobalCommand(application), command).await
     }
 
@@ -45,7 +46,7 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `ApplicationCommand`
-    pub async fn get_global_command(&self, application: ApplicationId, command: CommandId) -> ClientResult<ApplicationCommand> {
+    pub async fn get_global_command(&self, application: ApplicationId, command: CommandId) -> ClientResult<InteractionData<ApplicationCommandData>> {
         self.get(GetGlobalCommand(application, command)).await
     }
 
@@ -61,9 +62,9 @@ impl DiscordClient {
         // todo maybe don't support this it kinda breaks stuff
         new_name: Option<&'a str>,
         new_description: Option<&'a str>,
-        new_options: Option<TopLevelOption>,
+        new_options: Option<Vec<new_command::CommandOption>>,
         new_default_permission: Option<bool>,
-    ) -> ClientResult<ApplicationCommand> {
+    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
         self.patch(
             EditGlobalCommand(application, id),
             Edit {
@@ -105,7 +106,8 @@ impl DiscordClient {
         &self,
         application: ApplicationId,
         commands: Vec<Command>,
-    ) -> ClientResult<Vec<ApplicationCommand>> {
+    ) -> ClientResult<Vec<Command>> {
+    // ) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
         self.put(BulkOverwriteGlobalCommands(application), commands).await
     }
 
@@ -114,7 +116,7 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `Vec<ApplicationCommand>`
-    pub async fn get_guild_commands(&self, application: ApplicationId, guild: GuildId) -> ClientResult<Vec<ApplicationCommand>> {
+    pub async fn get_guild_commands(&self, application: ApplicationId, guild: GuildId) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
         self.get(GetGuildCommands(application, guild)).await
     }
 
@@ -131,7 +133,7 @@ impl DiscordClient {
         application: ApplicationId,
         guild: GuildId,
         command: Command,
-    ) -> ClientResult<ApplicationCommand> {
+    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
         self.post(CreateGuildCommand(application, guild), command).await
     }
 
@@ -145,7 +147,7 @@ impl DiscordClient {
         application: ApplicationId,
         guild: GuildId,
         command: CommandId,
-    ) -> ClientResult<ApplicationCommand> {
+    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
         self.get(GetGuildCommand(application, guild, command)).await
     }
 
@@ -162,9 +164,9 @@ impl DiscordClient {
         id: CommandId,
         new_name: Option<&'a str>,
         new_description: Option<&'a str>,
-        new_options: Option<TopLevelOption>,
+        new_options: Option<Vec<new_command::CommandOption>>,
         new_default_permission: Option<bool>,
-    ) -> ClientResult<ApplicationCommand> {
+    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
         self.patch(
             EditGuildCommand(application, guild, id),
             Edit {
@@ -203,61 +205,64 @@ impl DiscordClient {
         application: ApplicationId,
         guild: GuildId,
         commands: Vec<Command>,
-    ) -> ClientResult<Vec<ApplicationCommand>> {
+    ) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
         self.put(BulkOverwriteGuildCommands(application, guild), commands).await
     }
 
-    /// Fetches command permissions for all commands for your application in a guild.
-    ///
-    /// # Errors
-    ///
-    /// If the http request fails, or fails to deserialize the response into a
-    /// `Vec<GuildApplicationCommandPermission>`
-    pub async fn get_guild_application_command_permissions(
-        &self,
-        application: ApplicationId,
-        guild: GuildId,
-    ) -> ClientResult<Vec<GuildApplicationCommandPermission>> {
-        self.get(GetGuildApplicationCommandPermissions(application, guild)).await
-    }
+    // todo
+    // /// Fetches command permissions for all commands for your application in a guild.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the http request fails, or fails to deserialize the response into a
+    // /// `Vec<GuildApplicationCommandPermission>`
+    // pub async fn get_guild_application_command_permissions(
+    //     &self,
+    //     application: ApplicationId,
+    //     guild: GuildId,
+    // ) -> ClientResult<Vec<GuildApplicationCommandPermission>> {
+    //     self.get(GetGuildApplicationCommandPermissions(application, guild)).await
+    // }
 
-    /// Fetches command permissions for a specific command for your application in a guild.
-    ///
-    /// # Errors
-    ///
-    /// If the http request fails, or fails to deserialize the response into a
-    /// `GuildApplicationCommandPermission`
-    pub async fn get_application_command_permissions(
-        &self,
-        application: ApplicationId,
-        guild: GuildId,
-        command: CommandId,
-    ) -> ClientResult<GuildApplicationCommandPermission> {
-        self.get(GetApplicationCommandPermissions(application, guild, command)).await
-    }
+    // todo
+    // /// Fetches command permissions for a specific command for your application in a guild.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the http request fails, or fails to deserialize the response into a
+    // /// `GuildApplicationCommandPermission`
+    // pub async fn get_application_command_permissions(
+    //     &self,
+    //     application: ApplicationId,
+    //     guild: GuildId,
+    //     command: CommandId,
+    // ) -> ClientResult<GuildApplicationCommandPermission> {
+    //     self.get(GetApplicationCommandPermissions(application, guild, command)).await
+    // }
 
-    /// Edits command permissions for a specific command for your application in a guild.
-    ///
-    /// This endpoint will overwrite existing permissions for the command in that guild.
-    ///
-    /// # Errors
-    ///
-    /// If the http request fails
-    pub async fn edit_application_command_permissions(
-        &self,
-        application: ApplicationId,
-        guild: GuildId,
-        command: CommandId,
-        permissions: Vec<CommandPermissions>,
-    ) -> ClientResult<GuildApplicationCommandPermission> {
-        self.put(
-            EditApplicationCommandPermissions(application, guild, command),
-            GuildCommandPermissions {
-                // id: command,
-                permissions,
-            },
-        ).await
-    }
+    // bots can't edit perms anymore :(
+    // /// Edits command permissions for a specific command for your application in a guild.
+    // ///
+    // /// This endpoint will overwrite existing permissions for the command in that guild.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the http request fails
+    // pub async fn edit_application_command_permissions(
+    //     &self,
+    //     application: ApplicationId,
+    //     guild: GuildId,
+    //     command: CommandId,
+    //     permissions: Vec<CommandPermissions>,
+    // ) -> ClientResult<GuildApplicationCommandPermission> {
+    //     self.put(
+    //         EditApplicationCommandPermissions(application, guild, command),
+    //         GuildCommandPermissions {
+    //             // id: command,
+    //             permissions,
+    //         },
+    //     ).await
+    // }
 
     // /// Edits command permissions for a specific command for your application in a guild.
     // ///
@@ -402,7 +407,7 @@ struct Edit<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    options: Option<TopLevelOption>,
+    options: Option<Vec<new_command::CommandOption>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     default_permission: Option<bool>,
 }
@@ -498,7 +503,7 @@ impl WebhookMessage {
     /// # Errors
     ///
     /// Returns `Err(builder)` if this message already has 10 or more embeds
-    pub fn try_embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) -> std::result::Result<(), F> {
+    pub fn try_embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) -> Result<(), F> {
         if self.embeds.len() >= 10 {
             Err(builder)
         } else {
