@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "discorsd",
+    "command_data_derive",
+    "derive_test",
+]

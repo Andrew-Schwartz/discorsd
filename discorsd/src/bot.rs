@@ -393,8 +393,6 @@ pub trait BotExt: Bot + 'static {
                             user,
                             token,
                         );
-                        println!("options = {:?}", options);
-                        println!("interaction = {:?}", interaction);
                         let global_command = state.global_commands.get().unwrap().get(&id);
                         if let Some(command) = global_command {
                             command.run(Arc::clone(&state), interaction, options).await?;

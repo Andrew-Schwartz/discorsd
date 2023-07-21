@@ -304,12 +304,6 @@ impl DiscordClient {
         //
         //     }
         // }
-        // todo fix files
-        println!("response = {:?}", response);
-        // self.post(
-        //     CreateInteractionResponse(interaction, token.into()),
-        //     response.clone()
-        // ).await.map(|()| response)
         self.send_message_with_files(
             CreateInteractionResponse(interaction, token.into()),
             response.clone(),

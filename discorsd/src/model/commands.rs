@@ -866,7 +866,6 @@ impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubComman
     type Lower = new_interaction::DataOption<new_interaction::SubCommand>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
-        println!("fdo: SCG");
         match data {
             InteractionOption::Group(group) => Ok(group),
             InteractionOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),
@@ -895,7 +894,6 @@ impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubComman
     type Lower = Vec<new_interaction::InteractionDataOption>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
-        println!("fdo: SC");
         match data {
             InteractionOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
             InteractionOption::Command(data) => Ok(data),
@@ -924,7 +922,6 @@ impl NewOptionsLadder for Vec<new_interaction::InteractionDataOption> {
     type Lower = new_interaction::InteractionDataOption;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
-        println!("fdo: V<O>");
         match data {
             InteractionOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
             InteractionOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),

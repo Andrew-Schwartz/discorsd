@@ -151,7 +151,6 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
                  interaction: InteractionUse<SlashCommandData, Unused>,
                  data: InteractionOption,
     ) -> Result<InteractionUse<SlashCommandData, Used>, BotError> {
-        println!("data = {:?}", data);
         match <<Self as SlashCommand>::Data as CommandData<Self>>::Options::from_data_option(data) {
             Ok(options) => match <Self as SlashCommand>::Data::from_options(options) {
                 Ok(data) => {
