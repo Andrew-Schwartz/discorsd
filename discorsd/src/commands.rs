@@ -20,8 +20,8 @@ use crate::model::emoji::Emoji;
 use crate::model::ids::{CommandId, GuildId};
 use crate::model::interaction_response::ephemeral;
 use crate::model::new_command;
-use crate::model::new_command::Command;
-use crate::model::new_interaction::{ApplicationCommandData, InteractionData, InteractionOption};
+use crate::model::new_command::{ApplicationCommand, Command};
+use crate::model::new_interaction::InteractionOption;
 use crate::shard::dispatch::ReactionUpdate;
 
 /// The trait to implement to define a Slash Command.
@@ -151,6 +151,7 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
                  interaction: InteractionUse<SlashCommandData, Unused>,
                  data: InteractionOption,
     ) -> Result<InteractionUse<SlashCommandData, Used>, BotError> {
+        println!("data = {:?}", data);
         match <<Self as SlashCommand>::Data as CommandData<Self>>::Options::from_data_option(data) {
             Ok(options) => match <Self as SlashCommand>::Data::from_options(options) {
                 Ok(data) => {
@@ -244,7 +245,7 @@ pub trait SlashCommandExt: SlashCommandRaw {
         state: State,
         guild: GuildId,
         command: CommandId,
-    ) -> ClientResult<InteractionData<ApplicationCommandData>>
+    ) -> ClientResult<ApplicationCommand>
         where
             State: AsRef<BotState<B>> + Send,
             B: Send + Sync + 'static

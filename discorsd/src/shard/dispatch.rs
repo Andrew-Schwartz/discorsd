@@ -494,6 +494,434 @@ pub struct GuildCreate {
     // pub(crate) threads: Vec<Thread>,
 }
 
+#[test]
+fn test_guild_create() {
+    // const JSON: &str = r#"{"t":"GUILD_CREATE","s":2,"op":0,"d":{"owner_id":"243418816510558208","system_channel_id":"492122906864779276","guild_hashes":{"version":1,"roles":{"omitted":false,"hash":"OROePw"},"metadata":{"omitted":false,"hash":"aD+z8Q"},"channels":{"omitted":false,"hash":"AiVDlg"}},"system_channel_flags":0,"guild_scheduled_events":[],"afk_timeout":300,"region":"deprecated","stickers":[],"rules_channel_id":null,"stage_instances":[],"members":[{"user":{"username":"Avalon Bot (DEV)","public_flags":0,"id":"780237314734686208","global_name":null,"display_name":null,"discriminator":"6988","bot":true,"avatar_decoration":null,"avatar":"5b4212af734408382daff0cb4c0be97d"},"roles":["780239802196426773"],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2020-11-23T01:14:25.047000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"avatar":null}],"premium_subscription_count":0,"application_id":null,"safety_alerts_channel_id":null,"large":false,"default_message_notifications":0,"inventory_settings":null,"mfa_level":0,"discovery_splash":null,"max_video_channel_users":25,"description":null,"explicit_content_filter":0,"nsfw_level":0,"afk_channel_id":null,"icon":null,"id":"492122906864779274","hub_type":null,"incidents_data":null,"public_updates_channel_id":null,"voice_states":[],"home_header":null,"member_count":8,"vanity_url_code":null,"preferred_locale":"en-US","presences":[],"embedded_activities":[],"splash":null,"features":[],"application_command_counts":{"1":38},"threads":[],"banner":null,"joined_at":"2020-11-23T01:14:25.047000+00:00","max_members":500000,"roles":[{"version":0,"unicode_emoji":null,"tags":{},"position":0,"permissions":"137411140509249","name":"@everyone","mentionable":false,"managed":false,"id":"492122906864779274","icon":null,"hoist":false,"flags":0,"color":0},{"version":0,"unicode_emoji":null,"tags":{"bot_id":"492123129573802004"},"position":3,"permissions":"6509947968","name":"Avalon Bot","mentionable":false,"managed":true,"id":"492123963728855044","icon":null,"hoist":false,"flags":0,"color":0},{"version":0,"unicode_emoji":null,"tags":{},"position":6,"permissions":"6546775617","name":"myrole","mentionable":true,"managed":false,"id":"592892380609511445","icon":null,"hoist":false,"flags":0,"color":15844367},{"version":0,"unicode_emoji":null,"tags":{"bot_id":"713764953525583897"},"position":5,"permissions":"6442576960","name":"Rutgers Course Sniper","mentionable":false,"managed":true,"id":"713792310659514462","icon":null,"hoist":false,"flags":0,"color":0},{"version":1688673986671,"unicode_emoji":null,"tags":{"bot_id":"780237314734686208"},"position":2,"permissions":"8","name":"Avalon Bot (DEV)","mentionable":false,"managed":true,"id":"780239802196426773","icon":null,"hoist":false,"flags":0,"color":0},{"version":0,"unicode_emoji":null,"tags":{},"position":1,"permissions":"6546775617","name":"\"pretty color\"","mentionable":false,"managed":false,"id":"788583747771433020","icon":null,"hoist":false,"flags":0,"color":5533306},{"version":0,"unicode_emoji":null,"tags":{},"position":1,"permissions":"6546775617","name":"new role","mentionable":false,"managed":false,"id":"788893153209745409","icon":null,"hoist":false,"flags":0,"color":0},{"version":0,"unicode_emoji":null,"tags":{"bot_id":"928797878669955082"},"position":1,"permissions":"8799381367872","name":"Counter","mentionable":false,"managed":true,"id":"928808168023281716","icon":null,"hoist":false,"flags":0,"color":0},{"version":0,"unicode_emoji":null,"tags":{"bot_id":"268547439714238465"},"position":1,"permissions":"274878221376","name":"Scryfall","mentionable":false,"managed":true,"id":"991036300272480349","icon":null,"hoist":false,"flags":0,"color":0}],"emojis":[{"version":0,"roles":[],"require_colons":true,"name":"echan","managed":false,"id":"786354378885824513","available":true,"animated":false},{"version":0,"roles":[],"require_colons":true,"name":"bruh","managed":false,"id":"788901233016045599","available":true,"animated":false},{"version":0,"roles":[],"require_colons":true,"name":"Bonk","managed":false,"id":"839001103391260692","available":true,"animated":false},{"version":0,"roles":[],"require_colons":true,"name":"Bonk_2_Electric_Boogaloo","managed":false,"id":"839001103844114432","available":true,"animated":false},{"version":0,"roles":[],"require_colons":true,"name":"Bonk_cropped","managed":false,"id":"839001439601950750","available":true,"animated":false},{"version":0,"roles":[],"require_colons":true,"name":"Bonk_2_Electric_Boogaloo_cropped","managed":false,"id":"839001744443703317","available":true,"animated":false}],"latest_onboarding_question_id":null,"verification_level":0,"lazy":true,"premium_progress_bar_enabled":false,"nsfw":false,"unavailable":false,"channels":[{"version":0,"type":4,"position":0,"permission_overwrites":[],"name":"Text Channels","id":"492122906864779275","flags":0},{"version":0,"type":0,"topic":null,"rate_limit_per_user":0,"position":0,"permission_overwrites":[{"type":0,"id":"492122906864779274","deny":"0","allow":"0"}],"parent_id":"492122906864779275","name":"general","last_message_id":"991036430912454696","id":"492122906864779276","flags":0},{"version":0,"type":4,"position":2,"permission_overwrites":[],"name":"Voice Channels","id":"492122907300855818","flags":0},{"version":0,"user_limit":0,"type":2,"rtc_region":null,"rate_limit_per_user":0,"position":0,"permission_overwrites":[],"parent_id":"492122907300855818","name":"General","last_message_id":null,"id":"492122907300855819","flags":0,"bitrate":64000},{"version":0,"type":0,"topic":null,"rate_limit_per_user":0,"position":1,"permission_overwrites":[{"type":0,"id":"780239802196426773","deny":"1024","allow":"0"}],"parent_id":"492122906864779275","name":"avalon_bot","last_message_id":"849017251914842192","id":"492122962451759124","flags":0},{"version":1667238419348,"type":0,"topic":null,"rate_limit_per_user":0,"position":2,"permission_overwrites":[{"type":0,"id":"492123963728855044","deny":"1024","allow":"0"}],"parent_id":"492122906864779275","name":"dev_bot","last_pin_timestamp":"2023-07-06T20:05:55+00:00","last_message_id":"1131797440643735683","id":"780240796690808912","flags":0},{"version":0,"type":0,"topic":"topic lol","rate_limit_per_user":0,"position":3,"permission_overwrites":[{"type":1,"id":"592500196303437826","deny":"262144","allow":"16"}],"parent_id":"492122906864779275","name":"test-member-overwrite","last_message_id":"793351162396278814","id":"781369592982929408","flags":0}],"name":"Bots Bots Bots","max_stage_video_channel_users":50,"premium_tier":0}}"#;
+    const JSON: &str = r#"{
+  "owner_id": "243418816510558208",
+  "system_channel_id": "492122906864779276",
+  "guild_hashes": {
+    "version": 1,
+    "roles": {
+      "omitted": false,
+      "hash": "OROePw"
+    },
+    "metadata": {
+      "omitted": false,
+      "hash": "aD+z8Q"
+    },
+    "channels": {
+      "omitted": false,
+      "hash": "AiVDlg"
+    }
+  },
+  "system_channel_flags": 0,
+  "guild_scheduled_events": [],
+  "afk_timeout": 300,
+  "region": "deprecated",
+  "stickers": [],
+  "rules_channel_id": null,
+  "stage_instances": [],
+  "members": [
+    {
+      "user": {
+        "username": "Avalon Bot (DEV)",
+        "public_flags": 0,
+        "id": "780237314734686208",
+        "global_name": null,
+        "display_name": null,
+        "discriminator": "6988",
+        "bot": true,
+        "avatar_decoration": null,
+        "avatar": "5b4212af734408382daff0cb4c0be97d"
+      },
+      "roles": [
+        "780239802196426773"
+      ],
+      "premium_since": null,
+      "pending": false,
+      "nick": null,
+      "mute": false,
+      "joined_at": "2020-11-23T01:14:25.047000+00:00",
+      "flags": 0,
+      "deaf": false,
+      "communication_disabled_until": null,
+      "avatar": null
+    }
+  ],
+  "premium_subscription_count": 0,
+  "application_id": null,
+  "safety_alerts_channel_id": null,
+  "large": false,
+  "default_message_notifications": 0,
+  "inventory_settings": null,
+  "mfa_level": 0,
+  "discovery_splash": null,
+  "max_video_channel_users": 25,
+  "description": null,
+  "explicit_content_filter": 0,
+  "nsfw_level": 0,
+  "afk_channel_id": null,
+  "icon": null,
+  "id": "492122906864779274",
+  "hub_type": null,
+  "incidents_data": null,
+  "public_updates_channel_id": null,
+  "voice_states": [],
+  "home_header": null,
+  "member_count": 8,
+  "vanity_url_code": null,
+  "preferred_locale": "en-US",
+  "presences": [],
+  "embedded_activities": [],
+  "splash": null,
+  "features": [],
+  "application_command_counts": {
+    "1": 38
+  },
+  "threads": [],
+  "banner": null,
+  "joined_at": "2020-11-23T01:14:25.047000+00:00",
+  "max_members": 500000,
+  "roles": [
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {},
+      "position": 0,
+      "permissions": "137411140509249",
+      "name": "@everyone",
+      "mentionable": false,
+      "managed": false,
+      "id": "492122906864779274",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {
+        "bot_id": "492123129573802004"
+      },
+      "position": 3,
+      "permissions": "6509947968",
+      "name": "Avalon Bot",
+      "mentionable": false,
+      "managed": true,
+      "id": "492123963728855044",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {},
+      "position": 6,
+      "permissions": "6546775617",
+      "name": "myrole",
+      "mentionable": true,
+      "managed": false,
+      "id": "592892380609511445",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 15844367
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {
+        "bot_id": "713764953525583897"
+      },
+      "position": 5,
+      "permissions": "6442576960",
+      "name": "Rutgers Course Sniper",
+      "mentionable": false,
+      "managed": true,
+      "id": "713792310659514462",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    },
+    {
+      "version": 1688673986671,
+      "unicode_emoji": null,
+      "tags": {
+        "bot_id": "780237314734686208"
+      },
+      "position": 2,
+      "permissions": "8",
+      "name": "Avalon Bot (DEV)",
+      "mentionable": false,
+      "managed": true,
+      "id": "780239802196426773",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {},
+      "position": 1,
+      "permissions": "6546775617",
+      "name": "\"pretty color\"",
+      "mentionable": false,
+      "managed": false,
+      "id": "788583747771433020",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 5533306
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {},
+      "position": 1,
+      "permissions": "6546775617",
+      "name": "new role",
+      "mentionable": false,
+      "managed": false,
+      "id": "788893153209745409",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {
+        "bot_id": "928797878669955082"
+      },
+      "position": 1,
+      "permissions": "8799381367872",
+      "name": "Counter",
+      "mentionable": false,
+      "managed": true,
+      "id": "928808168023281716",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    },
+    {
+      "version": 0,
+      "unicode_emoji": null,
+      "tags": {
+        "bot_id": "268547439714238465"
+      },
+      "position": 1,
+      "permissions": "274878221376",
+      "name": "Scryfall",
+      "mentionable": false,
+      "managed": true,
+      "id": "991036300272480349",
+      "icon": null,
+      "hoist": false,
+      "flags": 0,
+      "color": 0
+    }
+  ],
+  "emojis": [
+    {
+      "version": 0,
+      "roles": [],
+      "require_colons": true,
+      "name": "echan",
+      "managed": false,
+      "id": "786354378885824513",
+      "available": true,
+      "animated": false
+    },
+    {
+      "version": 0,
+      "roles": [],
+      "require_colons": true,
+      "name": "bruh",
+      "managed": false,
+      "id": "788901233016045599",
+      "available": true,
+      "animated": false
+    },
+    {
+      "version": 0,
+      "roles": [],
+      "require_colons": true,
+      "name": "Bonk",
+      "managed": false,
+      "id": "839001103391260692",
+      "available": true,
+      "animated": false
+    },
+    {
+      "version": 0,
+      "roles": [],
+      "require_colons": true,
+      "name": "Bonk_2_Electric_Boogaloo",
+      "managed": false,
+      "id": "839001103844114432",
+      "available": true,
+      "animated": false
+    },
+    {
+      "version": 0,
+      "roles": [],
+      "require_colons": true,
+      "name": "Bonk_cropped",
+      "managed": false,
+      "id": "839001439601950750",
+      "available": true,
+      "animated": false
+    },
+    {
+      "version": 0,
+      "roles": [],
+      "require_colons": true,
+      "name": "Bonk_2_Electric_Boogaloo_cropped",
+      "managed": false,
+      "id": "839001744443703317",
+      "available": true,
+      "animated": false
+    }
+  ],
+  "latest_onboarding_question_id": null,
+  "verification_level": 0,
+  "lazy": true,
+  "premium_progress_bar_enabled": false,
+  "nsfw": false,
+  "unavailable": false,
+  "channels": [
+    {
+      "version": 0,
+      "type": 4,
+      "position": 0,
+      "permission_overwrites": [],
+      "name": "Text Channels",
+      "id": "492122906864779275",
+      "flags": 0
+    },
+    {
+      "version": 0,
+      "type": 0,
+      "topic": null,
+      "rate_limit_per_user": 0,
+      "position": 0,
+      "permission_overwrites": [
+        {
+          "type": 0,
+          "id": "492122906864779274",
+          "deny": "0",
+          "allow": "0"
+        }
+      ],
+      "parent_id": "492122906864779275",
+      "name": "general",
+      "last_message_id": "991036430912454696",
+      "id": "492122906864779276",
+      "flags": 0
+    },
+    {
+      "version": 0,
+      "type": 4,
+      "position": 2,
+      "permission_overwrites": [],
+      "name": "Voice Channels",
+      "id": "492122907300855818",
+      "flags": 0
+    },
+    {
+      "version": 0,
+      "user_limit": 0,
+      "type": 2,
+      "rtc_region": null,
+      "rate_limit_per_user": 0,
+      "position": 0,
+      "permission_overwrites": [],
+      "parent_id": "492122907300855818",
+      "name": "General",
+      "last_message_id": null,
+      "id": "492122907300855819",
+      "flags": 0,
+      "bitrate": 64000
+    },
+    {
+      "version": 0,
+      "type": 0,
+      "topic": null,
+      "rate_limit_per_user": 0,
+      "position": 1,
+      "permission_overwrites": [
+        {
+          "type": 0,
+          "id": "780239802196426773",
+          "deny": "1024",
+          "allow": "0"
+        }
+      ],
+      "parent_id": "492122906864779275",
+      "name": "avalon_bot",
+      "last_message_id": "849017251914842192",
+      "id": "492122962451759124",
+      "flags": 0
+    },
+    {
+      "version": 1667238419348,
+      "type": 0,
+      "topic": null,
+      "rate_limit_per_user": 0,
+      "position": 2,
+      "permission_overwrites": [
+        {
+          "type": 0,
+          "id": "492123963728855044",
+          "deny": "1024",
+          "allow": "0"
+        }
+      ],
+      "parent_id": "492122906864779275",
+      "name": "dev_bot",
+      "last_pin_timestamp": "2023-07-06T20:05:55+00:00",
+      "last_message_id": "1131797440643735683",
+      "id": "780240796690808912",
+      "flags": 0
+    },
+    {
+      "version": 0,
+      "type": 0,
+      "topic": "topic lol",
+      "rate_limit_per_user": 0,
+      "position": 3,
+      "permission_overwrites": [
+        {
+          "type": 1,
+          "id": "592500196303437826",
+          "deny": "262144",
+          "allow": "16"
+        }
+      ],
+      "parent_id": "492122906864779275",
+      "name": "test-member-overwrite",
+      "last_message_id": "793351162396278814",
+      "id": "781369592982929408",
+      "flags": 0
+    }
+  ],
+  "name": "Bots Bots Bots",
+  "max_stage_video_channel_users": 50,
+  "premium_tier": 0
+}"#;
+    let guild: Guild = serde_json::from_str(JSON).unwrap();
+    println!("guild = {:#?}", guild);
+}
+
 #[async_trait]
 impl Update for GuildCreate {
     async fn update(&self, cache: &Cache) {

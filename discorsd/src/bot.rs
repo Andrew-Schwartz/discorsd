@@ -368,7 +368,7 @@ pub trait BotExt: Bot + 'static {
     /// Respond to an interaction with the matching [SlashCommand]. Should likely be used in the
     /// [Bot::interaction](Bot::interaction) method.
     async fn handle_interaction(interaction: new_interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
-        println!("interaction = {:#?}", interaction);
+        // println!("interaction = {:#?}", interaction);
         match interaction {
             new_interaction::Interaction::Ping => println!("PING!"),
             new_interaction::Interaction::ApplicationCommand(data) => {
@@ -393,6 +393,8 @@ pub trait BotExt: Bot + 'static {
                             user,
                             token,
                         );
+                        println!("options = {:?}", options);
+                        println!("interaction = {:?}", interaction);
                         let global_command = state.global_commands.get().unwrap().get(&id);
                         if let Some(command) = global_command {
                             command.run(Arc::clone(&state), interaction, options).await?;

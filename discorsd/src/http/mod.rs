@@ -180,6 +180,8 @@ impl DiscordClient {
                     } else {
                         ClientError::Http(status, route.clone())
                     };
+                    // println!("response.text().await = {:?}", response.text().await);
+                    // todo!()
                     backoff::Error::Permanent(permanent)
                 };
                 Err(err)

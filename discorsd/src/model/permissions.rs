@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::fmt::Formatter;
 
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::de::Error;
+use serde::de::{Error, Visitor};
 
 use crate::cache::Cache;
 use crate::model::channel::{Channel, Overwrite};
@@ -254,11 +255,36 @@ impl Permissions {
 // can't just use `serde_bitflag!` because the bitflags are received as strings
 impl<'de> Deserialize<'de> for Permissions {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let bits = <&'de str>::deserialize(d)?
-            .parse()
-            .map_err(|e| D::Error::custom(format!("Unable to parse bits as u64: {}", e)))?;
-        Self::from_bits(bits)
-            .ok_or_else(|| D::Error::custom(format!("Unexpected `Permissions` bitflag value {}", bits)))
+        struct PermsVisitor;
+        impl PermsVisitor {
+            fn get_perms<E: Error>(s: &str) -> Result<Permissions, E> {
+                let bits = s.parse()
+                    .map_err(|e| E::custom(format!("Unable to parse bits as u64: {}", e)))?;
+                Permissions::from_bits(bits)
+                    .ok_or_else(|| E::custom(format!("Unexpected `Permissions` bitflag value {}", bits)))
+            }
+        }
+        impl<'de> Visitor<'de> for PermsVisitor {
+            type Value = Permissions;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("string (permissions)")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: Error {
+                Self::get_perms(v)
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E> where E: Error {
+                Self::get_perms(v)
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: Error {
+                Self::get_perms(&v)
+            }
+        }
+
+        d.deserialize_str(PermsVisitor)
     }
 }
 

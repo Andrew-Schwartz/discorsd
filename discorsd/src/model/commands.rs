@@ -7,7 +7,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use log::warn;
 use tokio::time::{Duration, Instant};
 
 use crate::{BotState, utils};
@@ -867,10 +866,13 @@ impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubComman
     type Lower = new_interaction::DataOption<new_interaction::SubCommand>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
+        println!("fdo: SCG");
         match data {
             InteractionOption::Group(group) => Ok(group),
             InteractionOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),
             InteractionOption::Values(_) => Err(CommandParseError::BadGroupOccurrence),
+            // // todo more error types
+            // InteractionOption::Empty => Err(CommandParseError::BadGroupOccurrence)
         }
     }
 }
@@ -893,10 +895,13 @@ impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubComman
     type Lower = Vec<new_interaction::InteractionDataOption>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
+        println!("fdo: SC");
         match data {
             InteractionOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
             InteractionOption::Command(data) => Ok(data),
+            // todo better errors
             InteractionOption::Values(_) => Err(CommandParseError::BadGroupOccurrence),
+            // InteractionOption::Empty => Err(CommandParseError::BadCommandOccurrence),
         }
     }
 }
@@ -919,10 +924,12 @@ impl NewOptionsLadder for Vec<new_interaction::InteractionDataOption> {
     type Lower = new_interaction::InteractionDataOption;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
+        println!("fdo: V<O>");
         match data {
             InteractionOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
             InteractionOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),
-            InteractionOption::Values(vec) => Ok(vec)
+            InteractionOption::Values(vec) => Ok(vec),
+            // InteractionOption::Empty => Ok(Vec::new()),
         }
     }
 }
@@ -950,16 +957,17 @@ impl NewOptionsLadder for new_interaction::InteractionDataOption {
     type Lower = Lowest;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
-        match data {
-            InteractionOption::Command(_) => Err(CommandParseError::BadGroupOccurrence),
-            InteractionOption::Group(_) => Err(CommandParseError::BadCommandOccurrence),
-            InteractionOption::Values(mut values) => {
-                warn!("This probably shouldn't be happening???");
-                warn!("values = {:?}", values);
-                Ok(values.remove(0))
-            }
-
-        }
+        unreachable!()
+        // println!("fdo: O");
+        // match data {
+        //     InteractionOption::Command(_) => Err(CommandParseError::BadGroupOccurrence),
+        //     InteractionOption::Group(_) => Err(CommandParseError::BadCommandOccurrence),
+        //     InteractionOption::Values(mut values) => {
+        //         warn!("This probably shouldn't be happening???");
+        //         warn!("values = {:?}", values);
+        //         Ok(values.remove(0))
+        //     }
+        // }
     }
 }
 
@@ -1063,7 +1071,7 @@ impl<C: SlashCommandRaw> CommandData<C> for Infallible {
 
 // let `()` be used for commands with no options
 impl<Command: SlashCommandRaw> CommandData<Command> for () {
-    type Options = new_interaction::InteractionDataOption;
+    type Options = Vec<new_interaction::InteractionDataOption>;
 
     fn from_options(_: Self::Options) -> Result<Self, CommandParseError> {
         Ok(())

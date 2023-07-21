@@ -12,8 +12,7 @@ use crate::model::ids::*;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{AllowedMentions, Message};
 use crate::model::new_command;
-use crate::model::new_command::Command;
-use crate::model::new_interaction::{ApplicationCommandData, InteractionData};
+use crate::model::new_command::{ApplicationCommand, Command};
 
 impl DiscordClient {
     /// Fetch all of the global commands for your application.
@@ -21,7 +20,7 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `Vec<ApplicationCommand>`
-    pub async fn get_global_commands(&self, application: ApplicationId) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
+    pub async fn get_global_commands(&self, application: ApplicationId) -> ClientResult<Vec<ApplicationCommand>> {
         self.get(GetGlobalCommands(application)).await
     }
 
@@ -37,7 +36,7 @@ impl DiscordClient {
         &self,
         application: ApplicationId,
         command: Command,
-    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
+    ) -> ClientResult<ApplicationCommand> {
         self.post(CreateGlobalCommand(application), command).await
     }
 
@@ -46,7 +45,7 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `ApplicationCommand`
-    pub async fn get_global_command(&self, application: ApplicationId, command: CommandId) -> ClientResult<InteractionData<ApplicationCommandData>> {
+    pub async fn get_global_command(&self, application: ApplicationId, command: CommandId) -> ClientResult<ApplicationCommand> {
         self.get(GetGlobalCommand(application, command)).await
     }
 
@@ -64,7 +63,7 @@ impl DiscordClient {
         new_description: Option<&'a str>,
         new_options: Option<Vec<new_command::CommandOption>>,
         new_default_permission: Option<bool>,
-    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
+    ) -> ClientResult<ApplicationCommand> {
         self.patch(
             EditGlobalCommand(application, id),
             Edit {
@@ -106,7 +105,7 @@ impl DiscordClient {
         &self,
         application: ApplicationId,
         commands: Vec<Command>,
-    ) -> ClientResult<Vec<Command>> {
+    ) -> ClientResult<Vec<ApplicationCommand>> {
     // ) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
         self.put(BulkOverwriteGlobalCommands(application), commands).await
     }
@@ -116,7 +115,7 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `Vec<ApplicationCommand>`
-    pub async fn get_guild_commands(&self, application: ApplicationId, guild: GuildId) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
+    pub async fn get_guild_commands(&self, application: ApplicationId, guild: GuildId) -> ClientResult<Vec<ApplicationCommand>> {
         self.get(GetGuildCommands(application, guild)).await
     }
 
@@ -133,7 +132,7 @@ impl DiscordClient {
         application: ApplicationId,
         guild: GuildId,
         command: Command,
-    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
+    ) -> ClientResult<ApplicationCommand> {
         self.post(CreateGuildCommand(application, guild), command).await
     }
 
@@ -147,7 +146,7 @@ impl DiscordClient {
         application: ApplicationId,
         guild: GuildId,
         command: CommandId,
-    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
+    ) -> ClientResult<ApplicationCommand> {
         self.get(GetGuildCommand(application, guild, command)).await
     }
 
@@ -166,7 +165,7 @@ impl DiscordClient {
         new_description: Option<&'a str>,
         new_options: Option<Vec<new_command::CommandOption>>,
         new_default_permission: Option<bool>,
-    ) -> ClientResult<InteractionData<ApplicationCommandData>> {
+    ) -> ClientResult<ApplicationCommand> {
         self.patch(
             EditGuildCommand(application, guild, id),
             Edit {
@@ -205,7 +204,7 @@ impl DiscordClient {
         application: ApplicationId,
         guild: GuildId,
         commands: Vec<Command>,
-    ) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
+    ) -> ClientResult<Vec<ApplicationCommand>> {
         self.put(BulkOverwriteGuildCommands(application, guild), commands).await
     }
 
@@ -305,6 +304,12 @@ impl DiscordClient {
         //
         //     }
         // }
+        // todo fix files
+        println!("response = {:?}", response);
+        // self.post(
+        //     CreateInteractionResponse(interaction, token.into()),
+        //     response.clone()
+        // ).await.map(|()| response)
         self.send_message_with_files(
             CreateInteractionResponse(interaction, token.into()),
             response.clone(),

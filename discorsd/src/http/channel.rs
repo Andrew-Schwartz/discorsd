@@ -253,21 +253,23 @@ pub trait MessageChannelExt: Id<Id=ChannelId> {
     {
         let state = state.as_ref();
         let message = message.into();
-        let channel = state.cache.channel(self.id()).await.unwrap();
-        let perms = Permissions::get_own(&state.cache, &channel, channel.guild_id().unwrap()).await;
-        let check_perms = |perm: Permissions|
-            (perms.contains(perm))
-                .then(|| ())
-                .ok_or(ClientError::Perms(perm));
-        check_perms(Permissions::SEND_MESSAGES)?;
-        if message.tts {
-            check_perms(Permissions::SEND_TTS_MESSAGES)?
-        }
-        if message.message_reference.is_some() {
-            check_perms(Permissions::READ_MESSAGE_HISTORY)?
+        let id = self.id();
+        if let Some(channel) = state.cache.channel(id).await {
+            let perms = Permissions::get_own(&state.cache, &channel, channel.guild_id().unwrap()).await;
+            let check_perms = |perm: Permissions|
+                (perms.contains(perm))
+                    .then(|| ())
+                    .ok_or(ClientError::Perms(perm));
+            check_perms(Permissions::SEND_MESSAGES)?;
+            if message.tts {
+                check_perms(Permissions::SEND_TTS_MESSAGES)?
+            }
+            if message.message_reference.is_some() {
+                check_perms(Permissions::READ_MESSAGE_HISTORY)?
+            }
         }
 
-        state.client.create_message(self.id(), message).await
+        state.client.create_message(id, message).await
     }
 
     /// Try to send a message to this channel, regardless of whether this bot has the necessary

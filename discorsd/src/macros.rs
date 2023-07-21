@@ -135,7 +135,7 @@ macro_rules! serde_repr {
 /// can be (de)serialized with
 /// ```
 /// serde_num_tag! {
-///     pub enum MyData = "type": u8 {
+///     pub enum MyData = "type": u8 as MyDataType {
 ///         (1) => StringVariant(String),
 ///         (2) => Number {
 ///             /// documentation is allowed, as are serde meta tags, with the following syntax:
@@ -237,6 +237,32 @@ macro_rules! serde_num_tag {
     (ser_match_pat_tuple [ $ignore:ty ] $t:pat) => {
         $t
     };
+    (
+        ser_shim
+        [ $rename:literal ]
+        [ $tag_name:literal, $tag_type:ty ]
+    ) => {
+        #[derive(::serde::Serialize)]
+        struct Shim<'t, T> {
+            #[serde(rename = $tag_name)]
+            variant: $tag_type,
+            #[serde(rename = $rename)]
+            t: &'t T,
+        }
+    };
+    (
+        ser_shim
+        [ ]
+        [ $tag_name:literal, $tag_type:ty ]
+    ) => {
+        #[derive(::serde::Serialize)]
+        struct Shim<'t, T> {
+            #[serde(rename = $tag_name)]
+            variant: $tag_type,
+            #[serde(flatten)]
+            t: &'t T,
+        }
+    };
     // unit
     (
         ser_match_arm
@@ -280,7 +306,7 @@ macro_rules! serde_num_tag {
     (
         $(just $skip_ser_or_de:tt =>)?
         $(#[$enum_meta:meta])*
-        pub enum $enum_name:ident = $tag_name:literal: $tag_type:ty $(as $repr_name:ident)? {
+        pub enum $enum_name:ident = $tag_name:literal: $tag_type:ty $(as $repr_name:ident)? $(, inner = $rename:literal)? {
             $(
                 // todo distinguish the docs from the other meta stuff and copy those into the repr
                 $(#[$variant_meta:meta])*
@@ -390,12 +416,10 @@ macro_rules! serde_num_tag {
                             #[serde(rename = $tag_name)]
                             variant: $tag_type,
                         }
-                        #[derive(::serde::Serialize)]
-                        struct Shim<'t, T> {
-                            #[serde(rename = $tag_name)]
-                            variant: $tag_type,
-                            #[serde(flatten)]
-                            t: &'t T,
+                        serde_num_tag! {
+                            ser_shim
+                            [ $($rename)? ]
+                            [ $tag_name, $tag_type ]
                         }
 
                         match self {

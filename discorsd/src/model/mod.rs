@@ -45,7 +45,8 @@ pub struct BotGateway {
 pub struct DiscordError {
     pub code: DiscordErrorType,
     pub message: String,
-    pub errors: serde_json::Value,
+    #[serde(default)]
+    pub errors: Option<serde_json::Value>,
 }
 
 impl Display for DiscordError {

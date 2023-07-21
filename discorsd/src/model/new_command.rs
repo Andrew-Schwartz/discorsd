@@ -4,12 +4,13 @@ use std::collections::HashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use crate::commands::{CommandData, SlashCommandRaw};
 
+use crate::commands::{CommandData, SlashCommandRaw};
 use crate::model::channel::ChannelType;
-use crate::model::ids::{ChannelId, MentionableId, RoleId, UserId};
+use crate::model::ids::{ApplicationId, ChannelId, CommandId, MentionableId, RoleId, UserId};
 use crate::model::locales::Locale;
 use crate::model::message::Attachment;
+use crate::model::permissions::Permissions;
 use crate::serde_utils::null_as_t;
 
 // todo
@@ -22,6 +23,33 @@ static NAME_REGEX: Lazy<Regex> = Lazy::new(||
     Regex::new(r#"^[-_\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$"#).unwrap()
 );
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct ApplicationCommand {
+    /// Unique ID of command
+    pub id: CommandId,
+    // /// Type of command, defaults to 1
+    // pub type: one of application command type,
+    /// ID of the parent application
+    pub application_id: ApplicationId,
+    /// Guild ID of the command, if not global
+    #[serde(default)]
+    pub guild_id: Option<CommandId>,
+    /// Set of permissions represented as a bit set
+    #[serde(default)]
+    pub default_member_permissions: Option<Permissions>,
+    /// Indicates whether the command is available in DMs with the app, only for globally-scoped commands. By default, commands are visible.
+    #[serde(default)]
+    pub dm_permission: bool,
+    /// Indicates whether the command is age-restricted, defaults to false
+    #[serde(default)]
+    pub nsfw: bool,
+    // /// Auto-incrementing version identifier updated during substantial record changes
+    // pub version: usize,
+    #[serde(flatten)]
+    pub command: Command,
+}
+id_impl!(ApplicationCommand => CommandId);
+
 serde_num_tag! {
     /// This command is sent to Discord
     #[derive(Debug, PartialEq)]
@@ -29,7 +57,7 @@ serde_num_tag! {
         /// Slash commands; a text-based command that shows up when a user types /
         (1) = SlashCommand {
             /// Name of command, 1-32 characters
-            name: &'static str,
+            name: Cow<'static, str>,
             /// Localization dictionary for name field. Values follow the same restrictions as name
             #serde = deserialize_with = "null_as_t"
             #serde = default
@@ -43,12 +71,13 @@ serde_num_tag! {
             #serde = skip_serializing_if = "HashMap::is_empty"
             description_localizations: HashMap<Locale, Cow<'static, str>>,
             /// Parameters for the command, max of 25
+            #serde = default
             options: Vec<CommandOption>,
         },
         /// A UI-based command that shows up when you right click or tap on a user
         (2) = UserCommand {
             /// Name of command, 1-32 characters
-            name: &'static str,
+            name: Cow<'static, str>,
             /// Localization dictionary for name field. Values follow the same restrictions as name
             #serde = deserialize_with = "null_as_t"
             #serde = default
@@ -58,7 +87,7 @@ serde_num_tag! {
         /// A UI-based command that shows up when you right click or tap on a message
         (3) = MessageCommand {
             /// Name of command, 1-32 characters
-            name: &'static str,
+            name: Cow<'static, str>,
             /// Localization dictionary for name field. Values follow the same restrictions as name
             #serde = deserialize_with = "null_as_t"
             #serde = default
@@ -76,7 +105,7 @@ impl Command {
     ) -> Self {
         // todo validate
         Self::SlashCommand {
-            name,
+            name: name.into(),
             name_localizations: Default::default(),
             description: description.into(),
             description_localizations: Default::default(),
@@ -398,7 +427,7 @@ mod tests {
   ]
 }"#;
         let command = Command::SlashCommand {
-            name: "blep",
+            name: "blep".into(),
             name_localizations: Default::default(),
             description: "Send a random adorable animal photo".into(),
             description_localizations: Default::default(),
