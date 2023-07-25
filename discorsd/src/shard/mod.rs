@@ -409,9 +409,11 @@ impl<B: Bot + 'static> Shard<B> {
                     Arc::clone(&state),
                     update,
                 ).await,
-                InteractionCreate(dispatch::InteractionCreate { interaction }) => state.bot.interaction(
-                    interaction, Arc::clone(&state),
-                ).await,
+                InteractionCreate(dispatch::InteractionCreate { interaction }) => {
+                    state.bot.interaction(
+                        interaction, Arc::clone(&state),
+                    )
+                }.await,
                 MessageReactionAdd(add) => state.bot.reaction(
                     add.into(),
                     Arc::clone(&state),

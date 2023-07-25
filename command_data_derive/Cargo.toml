@@ -17,4 +17,4 @@ doc-comment = "0.3.3"
 [dependencies.syn]
 version = "1.0.70"
 # todo remove "extra-traits" when releasing
-features = ["extra-traits", "derive"]
+features = ["extra-traits", "full"]

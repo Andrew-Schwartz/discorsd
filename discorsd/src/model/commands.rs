@@ -4,6 +4,7 @@ use std::convert::Infallible;
 use std::fmt::Debug;
 use std::hash::{BuildHasher, Hash};
 use std::marker::PhantomData;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -16,12 +17,12 @@ use crate::errors::*;
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::interaction::WebhookMessage;
 use crate::model::{ids::*, new_command, new_interaction};
-use crate::model::components::{ComponentId, SelectOption};
+use crate::model::components::{ComponentId, SelectMenuType, SelectOption};
 use crate::model::guild::GuildMember;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{Attachment, Message};
 use crate::model::new_command::{Choice, CommandOption as NewCommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
-use crate::model::new_interaction::{DmUser, GuildUser, InteractionDataOption as NewInteractionDataOption, InteractionOption, InteractionUser};
+use crate::model::new_interaction::{ButtonPressData, DmUser, GuildUser, InteractionDataOption as NewInteractionDataOption, InteractionOption, InteractionUser, MenuSelectDataRaw};
 use crate::model::user::User;
 
 pub trait Usability: PartialEq {}
@@ -66,21 +67,11 @@ pub trait ComponentData {}
 
 impl<C: ComponentData> InteractionPayload for C {}
 
-// todo
-#[derive(Debug, Clone, PartialEq)]
-pub struct ButtonPressData {
-    pub custom_id: ComponentId,
-}
-
 impl ComponentData for ButtonPressData {}
 
-#[derive(Debug, Clone)]
-pub struct MenuSelectData<Data = String> {
-    pub custom_id: ComponentId,
-    pub values: Vec<Data>,
-}
+impl ComponentData for MenuSelectDataRaw {}
 
-impl<D> ComponentData for MenuSelectData<D> {}
+impl ComponentData for ComponentId {}
 
 #[async_trait]
 pub trait FinalizeInteraction<Data: InteractionPayload> {
@@ -1225,10 +1216,19 @@ impl<T, C, const N: usize> CommandData<C> for [T; N]
     }
 }
 
-pub trait MenuData: Sized {
+pub trait MenuData: Sized + FromStr {
+    type Data: SelectMenuType;
+
     fn options() -> Vec<SelectOption>;
-
-    fn from_string(string: String) -> Option<Self>;
-
-    fn into_string(self) -> String;
 }
+macro_rules! id_menu {
+    ($($id:ty),+ $(,)?) => {
+        $(
+            impl MenuData for $id {
+                type Data = $id;
+                fn options() -> Vec<SelectOption> { unreachable!() }
+            }
+        )+
+    };
+}
+id_menu!(UserId, RoleId, MentionableId, ChannelId);

@@ -9,9 +9,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::SerializeSeq;
 
-use crate::BotState;
 use crate::cache::IdMap;
-use crate::commands::{ButtonCommand, MenuCommand};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::model::channel::ChannelType;
 use crate::model::components::{ActionRow, ComponentId};
@@ -1782,29 +1780,29 @@ impl InteractionMessage {
         self.flags.set(MessageFlags::EPHEMERAL, true);
     }
 
-    pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
-        where B: Send + Sync + 'static,
-              Btn: ButtonCommand<Bot=B> + 'static,
-    {
-        self.buttons(state, [Box::new(button) as _])
-    }
-
-    pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
-        where B: Send + Sync + 'static,
-              I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
-    {
-        let mut component_buttons = Vec::new();
-        for button in buttons {
-            component_buttons.push(state.make_button(button));
-        }
-        self.components.push(ActionRow::buttons(component_buttons));
-    }
-
-    pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
-        where B: Send + Sync + 'static,
-              M: MenuCommand<Bot=B> + 'static,
-    {
-        let menu = state.make_string_menu(Box::new(menu));
-        self.components.push(ActionRow::select_menu(menu))
-    }
+    // pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
+    //     where B: Send + Sync + 'static,
+    //           Btn: ButtonCommand<Bot=B> + 'static,
+    // {
+    //     self.buttons(state, [Box::new(button) as _])
+    // }
+    //
+    // pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
+    //     where B: Send + Sync + 'static,
+    //           I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
+    // {
+    //     let mut component_buttons = Vec::new();
+    //     for button in buttons {
+    //         component_buttons.push(Button::new(state, button));
+    //     }
+    //     self.components.push(ActionRow::buttons(component_buttons));
+    // }
+    //
+    // pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
+    //     where B: Send + Sync + 'static,
+    //           M: MenuCommand<Bot=B> + 'static,
+    // {
+    //     let menu = state.make_string_menu(Box::new(menu));
+    //     self.components.push(ActionRow::select_menu(menu))
+    // }
 }

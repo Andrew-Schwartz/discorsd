@@ -1,12 +1,14 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt::Debug;
+use std::str::FromStr;
 
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, MenuCommand};
+use crate::commands::{ButtonCommand, MenuCommand, MenuData};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
-use crate::model::components::{ActionRow, Component, ComponentId};
+use crate::model::components::{ActionRow, Button, Component, ComponentId, Menu};
 use crate::model::message::{AllowedMentions, MessageFlags};
 use crate::model::new_command::Choice;
 use crate::serde_utils::BoolExt;
@@ -43,93 +45,6 @@ serde_num_tag! { just Serialize =>
         (9) = Modal(Modal),
     }
 }
-
-// #[doc = " After receiving an interaction, you must respond to acknowledge it. This may be a `pong` for a"]
-// #[doc = " `ping`, a message, or simply an acknowledgement that you have received it and will handle the"]
-// #[doc = " command async."]
-// #[doc = ""]
-// #[doc = " Interaction responses may choose to \"eat\" the user\'s command input if you do not wish to have"]
-// #[doc = " their slash command show up as message in chat. This may be helpful for slash commands, or"]
-// #[doc = " commands whose responses are asynchronous or ephemeral messages."]
-// #[derive(Debug, Clone)]
-// pub enum InteractionResponse {
-//     #[doc = " ACK a `Ping`"]
-//     Pong,
-//     #[doc = " respond to an interaction with a message"]
-//     ChannelMessageWithSource(InteractionMessage),
-//     #[doc = " ACK an interaction and edit a response later, the user sees a loading state"]
-//     DeferredChannelMessageWithSource,
-//     #[doc = " for components ONLY, ACK an interaction and edit the original message later; the user"]
-//     #[doc = " does not see a loading state"]
-//     DeferredUpdateMessage,
-//     #[doc = " for components ONLY, edit the message the component was attached to"]
-//     UpdateMessage(InteractionMessage),
-//     #[doc = " respond to an autocomplete interaction with suggested choices"]
-//     ApplicationCommandAutocompleteResult(Autocomplete),
-//     #[doc = " respond to an interaction with a popup modal"]
-//     #[doc = " Not available for `MODAL_SUBMIT` and `PING` interactions"]
-//     Modal(Modal),
-// }
-//
-// impl InteractionResponse {
-//     #[allow(dead_code)]
-//     pub const fn variant_type(&self) -> u8 {
-//         match self {
-//             Self::Pong { .. } => 1,
-//             Self::ChannelMessageWithSource { .. } => 4,
-//             Self::DeferredChannelMessageWithSource { .. } => 5,
-//             Self::DeferredUpdateMessage { .. } => 6,
-//             Self::UpdateMessage { .. } => 7,
-//             Self::ApplicationCommandAutocompleteResult { .. } => 8,
-//             Self::Modal { .. } => 9,
-//         }
-//     }
-// }
-//
-// const _: () = {};
-// const _: () = {
-//     impl ::serde::Serialize for InteractionResponse {
-//         fn serialize<S: ::serde::Serializer>(&self, s: S) -> ::std::result::Result<S::Ok, S::Error> {
-//             #[derive(::serde::Serialize)]
-//             struct UnitShim {
-//                 #[serde(rename = "type")]
-//                 variant: u8,
-//             }
-//             #[derive(::serde::Serialize)]
-//             struct Shim<'t, T> {
-//                 #[serde(rename = "type")]
-//                 variant: u8,
-//                 // #[serde(flatten)]
-//                 #[serde(rename = "data")]
-//                 t: &'t T,
-//             }
-//
-//             match self {
-//                 Self::Pong => {
-//                     UnitShim { variant: 1 }.serialize(s)
-//                 }
-//                 Self::ChannelMessageWithSource(t) => {
-//                     Shim { variant: 4, t: t }.serialize(s)
-//                 }
-//                 Self::DeferredChannelMessageWithSource => {
-//                     UnitShim { variant: 5 }.serialize(s)
-//                 }
-//                 Self::DeferredUpdateMessage => {
-//                     UnitShim { variant: 6 }.serialize(s)
-//                 }
-//                 Self::UpdateMessage(t) => {
-//                     Shim { variant: 7, t: t }.serialize(s)
-//                 }
-//                 Self::ApplicationCommandAutocompleteResult(t) => {
-//                     Shim { variant: 8, t: t }.serialize(s)
-//                 }
-//                 Self::Modal(t) => {
-//                     Shim { variant: 9, t: t }.serialize(s)
-//                 }
-//             }
-//         }
-//     }
-// };
 
 #[test]
 fn serialize_interaction_response() {
@@ -256,29 +171,45 @@ impl InteractionMessage {
         self.flags.set(MessageFlags::EPHEMERAL, true);
     }
 
-    pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
+    pub fn button<B, State, C, F>(&mut self, state: State, command: C, builder: F)
         where B: Send + Sync + 'static,
-              Btn: ButtonCommand<Bot=B> + 'static,
+              State: AsRef<BotState<B>>,
+              C: ButtonCommand<Bot=B>,
+              F: FnOnce(&mut Button),
     {
-        self.buttons(state, [Box::new(button) as _])
+        let mut button = Button::new();
+        builder(&mut button);
+        state.as_ref().register_button(&mut button, Box::new(command));
+        self.components.push(ActionRow::buttons(vec![button]))
+        // self.buttons(iter::once(button))
     }
 
-    pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
+    pub fn buttons<B, State, I>(&mut self, state: State, buttons: I)
         where B: Send + Sync + 'static,
-              I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
+              State: AsRef<BotState<B>>,
+              I: IntoIterator<Item=(Box<dyn ButtonCommand<Bot=B>>, Button)>,
     {
-        let mut component_buttons = Vec::new();
-        for button in buttons {
-            component_buttons.push(state.make_button(button));
-        }
-        self.components.push(ActionRow::buttons(component_buttons));
+        let buttons = buttons.into_iter()
+            .map(|(command, mut button)| {
+                state.as_ref().register_button(&mut button, command);
+                button
+            })
+            .collect();
+        self.components.push(ActionRow::buttons(buttons))
     }
 
-    pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
+    pub fn menu<B, State, C, F, D>(&mut self, state: State, command: C, builder: F)
         where B: Send + Sync + 'static,
-              M: MenuCommand<Bot=B> + 'static,
+              State: AsRef<BotState<B>>,
+              C: MenuCommand<Bot=B, Data=D>,
+              D: MenuData,
+              <D as FromStr>::Err: Debug,
+              Component: From<Menu<D::Data>>,
+              F: FnOnce(&mut Menu<D::Data>),
     {
-        let menu = state.make_string_menu(Box::new(menu));
-        self.components.push(ActionRow::select_menu(menu))
+        let mut menu = Menu::<D::Data>::new();
+        builder(&mut menu);
+        state.as_ref().register_menu(&mut menu, Box::new(command));
+        self.components.push(ActionRow::menu(menu))
     }
 }

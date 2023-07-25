@@ -39,7 +39,7 @@ pub fn struct_impl(ty: &Ident, generics: Vec<TypeParam>, fields: Fields, attribu
             // all structs are DataOptions
             type VecArg = ::discorsd::model::new_command::CommandDataOption;
 
-            fn make_args(command: &#command_type) -> Vec<Self::VecArg> {
+            fn make_args(command: &#command_type) -> ::std::vec::Vec<Self::VecArg> {
                 #data_options
             }
 

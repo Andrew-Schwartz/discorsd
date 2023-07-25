@@ -2007,7 +2007,7 @@ pub struct InteractionCreate {
 #[async_trait]
 impl Update for InteractionCreate {
     async fn update(&self, _cache: &Cache) {
-        println!("self = {:#?}", self);
+        // println!("self = {:#?}", self);
     }
 }
 

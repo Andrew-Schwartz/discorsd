@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::channel::ChannelType;
 use crate::model::emoji::Emoji;
-use crate::model::ids::{ChannelId, UserId, RoleId, MentionableId};
+use crate::model::ids::{ChannelId, MentionableId, RoleId, UserId};
 use crate::serde_utils::{BoolExt, SkipUnit};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -16,8 +16,8 @@ pub enum Components {
         /// the title of the popup modal, max 45 characters
         title: String,
         /// between 1 and 5 (inclusive) components that make up the modal
-        components: Vec<Component>
-    }
+        components: Vec<Component>,
+    },
 }
 
 serde_num_tag! {
@@ -28,13 +28,6 @@ serde_num_tag! {
         }
     }
 }
-
-// #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-// pub struct ActionRow {
-//     #[serde(rename = "type")]
-//     kind: u8,
-//     components: Vec<Component>,
-// }
 
 impl ActionRow {
     pub fn action_row(components: Vec<Component>) -> Self {
@@ -48,8 +41,14 @@ impl ActionRow {
             .collect())
     }
 
-    pub fn select_menu(menu: SelectMenu<String>) -> Self {
+    pub fn string_menu(menu: Menu<String>) -> Self {
         Self::action_row(vec![Component::SelectString(menu)])
+    }
+
+    pub fn menu<T: SelectMenuType>(menu: Menu<T>) -> Self
+        where Component: From<Menu<T>>,
+    {
+        Self::action_row(vec![menu.into()])
     }
 
     pub fn text_input(input: TextInput) -> Self {
@@ -75,13 +74,31 @@ serde_num_tag! {
     #[derive(Debug, Clone, PartialEq)]
     pub enum Component = "type": ComponentType {
         (ComponentType::Button) = Button(Button),
-        (ComponentType::StringMenu) = SelectString(SelectMenu<String>),
+        (ComponentType::StringMenu) = SelectString(Menu<String>),
         (ComponentType::TextInput) = TextInput(TextInput),
-        (ComponentType::UserMenu) = SelectUser(SelectMenu<UserId>),
-        (ComponentType::RoleMenu) = SelectRole(SelectMenu<RoleId>),
-        (ComponentType::MentionableMenu) = SelectMentionable(SelectMenu<MentionableId>),
-        (ComponentType::ChannelMenu) = SelectChannel(SelectMenu<ChannelId>),
+        (ComponentType::UserMenu) = SelectUser(Menu<UserId>),
+        (ComponentType::RoleMenu) = SelectRole(Menu<RoleId>),
+        (ComponentType::MentionableMenu) = SelectMentionable(Menu<MentionableId>),
+        (ComponentType::ChannelMenu) = SelectChannel(Menu<ChannelId>),
     }
+}
+macro_rules! from_menu {
+    ($($t:ty => $var:ident);* $(;)?) => {
+        $(
+            impl From<Menu<$t>> for Component {
+                fn from(value: Menu<$t>) -> Self {
+                    Self::$var(value)
+                }
+            }
+        )+
+    };
+}
+from_menu! {
+    String => SelectString;
+    UserId => SelectUser;
+    RoleId => SelectRole;
+    MentionableId => SelectMentionable;
+    ChannelId => SelectChannel;
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -96,25 +113,59 @@ impl<S> From<S> for ComponentId
     }
 }
 
+// todo have custom_id and url as an enum of some sort
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Button {
     /// one of button styles
-    pub style: ButtonStyle,
+    style: ButtonStyle,
     /// text that appears on the button, max 80 characters
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+    // todo just those fields not the whole emoji
     /// emoji name, id, and animated,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub emoji: Option<Emoji>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    emoji: Option<Emoji>,
     /// a developer-defined identifier for the component, max 100 characters
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub custom_id: Option<ComponentId>,
+    ///
+    /// required unless url is set
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) custom_id: Option<ComponentId>,
     /// a url for link-style buttons,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
+    ///
+    /// required unless custom_id is set
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
     /// whether the component is disabled, default false
-    #[serde(skip_serializing_if = "bool::is_false")]
-    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "bool::is_false")]
+    disabled: bool,
+}
+
+impl Button {
+    pub(crate) fn new() -> Self {
+        Self {
+            style: ButtonStyle::Primary,
+            label: None,
+            emoji: None,
+            custom_id: None,
+            url: None,
+            disabled: false,
+        }
+    }
+
+    /// text that appears on the button, max 80 characters
+    pub fn label<S: ToString>(&mut self, label: S) {
+        self.label = Some(label.to_string());
+    }
+
+    /// one of button styles
+    pub fn style(&mut self, style: ButtonStyle) {
+        self.style = style;
+    }
+
+    /// whether the button is disabled, default false
+    pub fn disable(&mut self) {
+        self.disabled = true;
+    }
 }
 
 /*
@@ -141,8 +192,8 @@ serde_repr! {
 }
 
 pub trait SelectMenuType {
-    type SelectOptions: SkipUnit;
-    type ChannelTypes: SkipUnit;
+    type SelectOptions: Default + SkipUnit;
+    type ChannelTypes: Default + SkipUnit;
 }
 macro_rules! smt {
     ($($t:ty => $so:ty, $ct:ty);* $(;)?) => {
@@ -163,27 +214,75 @@ smt! {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct SelectMenu<T: SelectMenuType> {
+pub struct Menu<T: SelectMenuType> {
     /// a developer-defined identifier for the button, max 100 characters
-    pub custom_id: ComponentId,
+    pub(crate) custom_id: ComponentId,
     /// the choices in the select, max 25
     #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
-    pub options: T::SelectOptions,
+    options: T::SelectOptions,
     /// List of channel types to include
     #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
-    pub channel_types: T::ChannelTypes,
+    channel_types: T::ChannelTypes,
     /// custom placeholder text if nothing is selected, max 100 characters
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub placeholder: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    placeholder: Option<String>,
     /// the minimum number of items that must be chosen; default 1, min 0, max 25
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub min_values: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    min_values: Option<usize>,
     /// the maximum number of items that can be chosen; default 1, max 25
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_values: Option<u8>,
-    /// disable the select, default false
-    #[serde(skip_serializing_if = "bool::is_false")]
-    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_values: Option<usize>,
+    /// disable the select menu, default false
+    #[serde(default, skip_serializing_if = "bool::is_false")]
+    disabled: bool,
+}
+
+impl<T: SelectMenuType> Menu<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            custom_id: ComponentId(String::new()),
+            options: T::SelectOptions::default(),
+            channel_types: T::ChannelTypes::default(),
+            placeholder: None,
+            min_values: None,
+            max_values: None,
+            disabled: false,
+        }
+    }
+
+    /// custom placeholder text if nothing is selected, max 100 characters
+    pub fn placeholder<S: ToString>(&mut self, placeholder: S) {
+        self.placeholder = Some(placeholder.to_string());
+    }
+
+    /// the minimum number of items that must be chosen; default 1, min 0, max 25
+    pub fn min_values(&mut self, min: usize) {
+        self.min_values = Some(min)
+    }
+
+    /// the maximum number of items that can be chosen; default 1, max 25
+    pub fn max_values(&mut self, max: usize) {
+        self.max_values = Some(max)
+    }
+
+    /// disable the select menu, default false
+    pub fn disable(&mut self) {
+        self.disabled = true;
+    }
+}
+
+impl Menu<String> {
+    /// the choices in the select, max 25
+    pub fn options(&mut self, options: Vec<SelectOption>) {
+        self.options = options;
+    }
+}
+
+impl Menu<ChannelId> {
+    /// list of channel types to include
+    pub fn channel_types(&mut self, channel_types: Vec<ChannelType>) {
+        self.channel_types = channel_types;
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -206,26 +305,26 @@ pub struct SelectOption {
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct TextInput {
     /// Developer-defined identifier for the input; max 100 characters
-	pub custom_id: String,
+    pub custom_id: String,
     /// The Text Input Style
-	pub style: TextInputStyle,
+    pub style: TextInputStyle,
     /// Label for this component; max 45 characters
-	pub label: String,
+    pub label: String,
     /// Minimum input length for a text input; min 0, max 4000
     #[serde(skip_serializing_if = "Option::is_none")]
-	pub min_length: Option<usize>,
+    pub min_length: Option<usize>,
     /// Maximum input length for a text input; min 1, max 4000
     #[serde(skip_serializing_if = "Option::is_none")]
-	pub max_length: Option<usize>,
+    pub max_length: Option<usize>,
     /// Whether this component is required to be filled (defaults to true)
     #[serde(default = "bool::default_true", skip_serializing_if = "bool::is_true")]
-	pub required: bool,
+    pub required: bool,
     /// Pre-filled value for this component; max 4000 characters
     #[serde(skip_serializing_if = "Option::is_none")]
-	pub value: Option<String>,
+    pub value: Option<String>,
     /// Custom placeholder text if the input is empty; max 100 characters
     #[serde(skip_serializing_if = "Option::is_none")]
-	pub placeholder: Option<String>,
+    pub placeholder: Option<String>,
 }
 
 serde_repr! {
@@ -379,7 +478,7 @@ mod tests {
 }"#;
         let message = MyMessage {
             content: "Mason is looking for new arena partners. What classes do you play?",
-            components: vec![ActionRow::select_menu(SelectMenu {
+            components: vec![ActionRow::menu::<String>(Menu {
                 custom_id: "class_select_1".into(),
                 options: vec![
                     SelectOption {

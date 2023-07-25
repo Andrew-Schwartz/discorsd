@@ -17,7 +17,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, MenuCommand};
 use crate::http::{ClientError, DiscordClient};
 use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;
@@ -757,31 +756,32 @@ impl CreateMessage {
         self.message_reference = Some(MessageReference::reply(message));
     }
 
-    pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
-        where B: Send + Sync + 'static,
-              Btn: ButtonCommand<Bot=B> + 'static,
-    {
-        self.buttons(state, [Box::new(button) as _])
-    }
+    // todo
+    // pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
+    //     where B: Send + Sync + 'static,
+    //           Btn: ButtonCommand<Bot=B> + 'static,
+    // {
+    //     self.buttons(state, [Box::new(button) as _])
+    // }
+    //
+    // pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
+    //     where B: Send + Sync + 'static,
+    //           I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
+    // {
+    //     let mut component_buttons = Vec::new();
+    //     for button in buttons {
+    //         component_buttons.push(Button::new(state, button));
+    //     }
+    //     self.components.push(ActionRow::buttons(component_buttons));
+    // }
 
-    pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
-        where B: Send + Sync + 'static,
-              I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
-    {
-        let mut component_buttons = Vec::new();
-        for button in buttons {
-            component_buttons.push(state.make_button(button));
-        }
-        self.components.push(ActionRow::buttons(component_buttons));
-    }
-
-    pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
-        where B: Send + Sync + 'static,
-              M: MenuCommand<Bot=B> + 'static,
-    {
-        let menu = state.make_string_menu(Box::new(menu));
-        self.components.push(ActionRow::select_menu(menu))
-    }
+    // pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
+    //     where B: Send + Sync + 'static,
+    //           M: MenuCommand<Bot=B> + 'static,
+    // {
+    //     let menu = state.make_string_menu(Box::new(menu));
+    //     self.components.push(ActionRow::menu(menu))
+    // }
 }
 
 /// A builder for an embed in a message.

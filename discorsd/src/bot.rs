@@ -22,16 +22,16 @@ use once_cell::sync::OnceCell;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::cache::Cache;
-use crate::commands::{ButtonCommand, MenuCommandRaw, MenuSelectData, ReactionCommand, SlashCommand, SlashCommandRaw};
+use crate::commands::{ButtonCommand, MenuCommandRaw, ReactionCommand, SlashCommand, SlashCommandRaw};
 use crate::errors::BotError;
 use crate::http::DiscordClient;
-use crate::model::commands::{ButtonPressData, InteractionUse, SlashCommandData};
-use crate::model::components::{Button, ComponentId, SelectMenu};
+use crate::model::commands::{InteractionUse, SlashCommandData};
+use crate::model::components::{Button, ComponentId, Menu, SelectMenuType};
 use crate::model::guild::{Guild, Integration};
 use crate::model::ids::*;
 use crate::model::message::Message;
 use crate::model::new_interaction;
-use crate::model::new_interaction::{ApplicationCommandData, MenuData, MessageComponentData};
+use crate::model::new_interaction::{ApplicationCommandData, MessageComponentData};
 use crate::model::permissions::Role;
 use crate::model::user::User;
 use crate::shard;
@@ -66,41 +66,46 @@ pub struct BotState<B: Send + Sync + 'static> {
     pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
     pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
     pub menus: std::sync::RwLock<HashMap<ComponentId, Box<dyn MenuCommandRaw<Bot=B>>>>,
+    // todo need to also have a way to distinguish between separate bot runs, like the first
+    //  interaction will always be 0 so you could use the old button or w/e and the new one would
+    //  trigger
     pub count: AtomicUsize,
 }
 
 impl<B: Send + Sync + 'static> BotState<B> {
-    pub(crate) fn make_button(&self, button: Box<dyn ButtonCommand<Bot=B>>) -> Button {
-        let count = self.count.fetch_add(1, Ordering::Relaxed);
-        let id: ComponentId = count.to_string().into();
-        let component = Button {
-            style: button.style(),
-            label: Some(button.label()),
-            emoji: button.emoji(),
-            custom_id: Some(id.clone()),
-            url: None,
-            disabled: false,
-        };
-        self.buttons.write().unwrap().insert(id, button);
-        component
+    fn create_id(&self) -> ComponentId {
+        let id = self.count.fetch_add(1, Ordering::Relaxed);
+        id.to_string().into()
     }
 
-    pub(crate) fn make_string_menu(&self, menu: Box<dyn MenuCommandRaw<Bot=B>>) -> SelectMenu<String> {
-        let count = self.count.fetch_add(1, Ordering::Relaxed);
-        let id: ComponentId = count.to_string().into();
-        let (min_values, max_values) = menu.num_values();
-        let component = SelectMenu {
-            custom_id: id.clone(),
-            options: menu.options(),
-            channel_types: (),
-            placeholder: menu.placeholder(),
-            min_values,
-            max_values,
-            disabled: menu.disabled(),
-        };
-        self.menus.write().unwrap().insert(id, menu);
-        component
+    pub(crate) fn register_button(&self, button: &mut Button, command: Box<dyn ButtonCommand<Bot=B>>) {
+        let id = self.create_id();
+        button.custom_id = Some(id.clone());
+        self.buttons.write().unwrap().insert(id, command);
     }
+
+    pub(crate) fn register_menu<T: SelectMenuType>(&self, menu: &mut Menu<T>, command: Box<dyn MenuCommandRaw<Bot=B>>) {
+        let id = self.create_id();
+        menu.custom_id = id.clone();
+        self.menus.write().unwrap().insert(id, command);
+    }
+
+    // pub(crate) fn make_string_menu(&self, menu: Box<dyn MenuCommandRaw<Bot=B>>) -> Menu<String> {
+    //     let count = self.count.fetch_add(1, Ordering::Relaxed);
+    //     let id: ComponentId = count.to_string().into();
+    //     let (min_values, max_values) = menu.num_values();
+    //     let component = Menu {
+    //         custom_id: id.clone(),
+    //         options: menu.options(),
+    //         channel_types: (),
+    //         placeholder: menu.placeholder(),
+    //         min_values,
+    //         max_values,
+    //         disabled: menu.disabled(),
+    //     };
+    //     self.menus.write().unwrap().insert(id, menu);
+    //     component
+    // }
 
     // pub fn button<Btn: ButtonCommand<Bot=B>>(&self, id: &ComponentId) -> Option<&mut Btn> {
     //     self.buttons.write().unwrap()
@@ -368,7 +373,6 @@ pub trait BotExt: Bot + 'static {
     /// Respond to an interaction with the matching [SlashCommand]. Should likely be used in the
     /// [Bot::interaction](Bot::interaction) method.
     async fn handle_interaction(interaction: new_interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
-        // println!("interaction = {:#?}", interaction);
         match interaction {
             new_interaction::Interaction::Ping => println!("PING!"),
             new_interaction::Interaction::ApplicationCommand(data) => {
@@ -425,13 +429,13 @@ pub trait BotExt: Bot + 'static {
                     locale
                 } = data;
                 match data {
-                    MessageComponentData::Button { custom_id } => {
-                        let command = state.buttons.read().unwrap().get(&custom_id).cloned();
+                    MessageComponentData::Button(data) => {
+                        let command = state.buttons.read().unwrap().get(&data.custom_id).cloned();
                         if let Some(command) = command {
                             let interaction = InteractionUse::new(
                                 interaction_id,
                                 application_id,
-                                ButtonPressData { custom_id },
+                                data,
                                 channel_id,
                                 user,
                                 token,
@@ -439,13 +443,17 @@ pub trait BotExt: Bot + 'static {
                             command.run(Arc::clone(&state), interaction).await?;
                         }
                     }
-                    MessageComponentData::StringMenu(MenuData { custom_id, values }) => {
-                        let command = state.menus.read().unwrap().get(&custom_id).cloned();
+                    MessageComponentData::StringMenu(data)
+                    | MessageComponentData::UserMenu(data)
+                    | MessageComponentData::RoleMenu(data)
+                    | MessageComponentData::MentionableMenu(data)
+                    | MessageComponentData::ChannelMenu(data) => {
+                        let command = state.menus.read().unwrap().get(&data.custom_id).cloned();
                         if let Some(command) = command {
                             let interaction = InteractionUse::new(
                                 interaction_id,
                                 application_id,
-                                MenuSelectData { custom_id, values },
+                                data,
                                 channel_id,
                                 user,
                                 token,
@@ -454,10 +462,6 @@ pub trait BotExt: Bot + 'static {
                         }
                     }
                     MessageComponentData::TextInput => todo!(),
-                    MessageComponentData::UserMenu(_) => todo!(),
-                    MessageComponentData::RoleMenu(_) => todo!(),
-                    MessageComponentData::MentionableMenu(_) => todo!(),
-                    MessageComponentData::ChannelMenu(_) => todo!(),
                 }
             }
             new_interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),

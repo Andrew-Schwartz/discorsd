@@ -441,6 +441,7 @@ use syn::{Data, DeriveInput, GenericParam, parse_macro_input};
 use syn::{Lit, Meta, MetaList, MetaNameValue, NestedMeta};
 
 use enum_choices::Variant as ChoicesVariant;
+use menu_command::Variant as MenuVariant;
 use enum_data::{Enum, Variant};
 use struct_data::*;
 
@@ -453,6 +454,7 @@ mod struct_data;
 mod enum_data;
 mod enum_choices;
 mod menu_command;
+mod button_command;
 
 /// See crate level documentation for general info, and the
 /// [Documentation_For_Field](Documentation_For_Field!),
@@ -555,6 +557,16 @@ fn dummy_impl(ty: &Ident) {
         }
     });
 }
+
+// #[proc_macro_attribute]
+// pub fn button_command(attr: TokenStream, input: TokenStream) -> TokenStream {
+//     let attr = parse_macro_input!(attr as AttributeArgs);
+//     let input = parse_macro_input!(input as ItemFn);
+//
+//     let output = button_command::button_impl(attr, input);
+//
+//     output.into()
+// }
 
 #[proc_macro_derive(MenuCommand, attributes(menu))]
 #[proc_macro_error]
@@ -820,4 +832,13 @@ handle_attribute! {
         /// The string to show in Discord for this choice. Useful when you want to display a multiple
         /// word choice.
         ["choice" => self.choice = Some(str)],
+}
+
+handle_attribute! {
+    /// Attributes on a MenuData enum variant
+    // todo
+    self: MenuVariant =>
+    " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), ..}), path =>
+        /// The label to show in Discord for this choice, as well as for the `Display` impl
+        ["label" => self.label = Some(str)],
 }

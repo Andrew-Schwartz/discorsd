@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::fmt::Debug;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -11,17 +12,15 @@ use downcast_rs::{Downcast, impl_downcast};
 use dyn_clone::{clone_trait_object, DynClone};
 
 use crate::BotState;
-use crate::commands::FinalizeInteraction;
 use crate::errors::{BotError, CommandParseErrorInfo};
 use crate::http::ClientResult;
 pub use crate::model::commands::*;
-use crate::model::components::{ButtonStyle, SelectOption};
-use crate::model::emoji::Emoji;
+use crate::model::components::ComponentId;
 use crate::model::ids::{CommandId, GuildId};
 use crate::model::interaction_response::ephemeral;
 use crate::model::new_command;
 use crate::model::new_command::{ApplicationCommand, Command};
-use crate::model::new_interaction::InteractionOption;
+use crate::model::new_interaction::{ButtonPressData, InteractionOption, MenuSelectDataRaw};
 use crate::shard::dispatch::ReactionUpdate;
 
 /// The trait to implement to define a Slash Command.
@@ -91,7 +90,7 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     /// Most of the time, this will be [`Used`](Used), meaning the [`run`](Self::run) method
     /// responded to and/or deleted the interaction. Alternatively, this can be
     /// [`Deferred`](Deferred) if the [`run`](Self::run) method only
-    /// [`defer`](InteractionUse::<Data,Unused>::defer)s the interaction, to automatically delete the
+    /// [`defer`](InteractionUse::<Data, Unused>::defer)s the interaction, to automatically delete the
     /// interaction after the [`run`](Self::run) method finishes.
     // todo this probably is not worth it
     type Use: NotUnused + Send;
@@ -193,9 +192,9 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
 /// have to manually create the [Command] sent to Discord, nor do you have to manually parse the
 /// interaction received when the command is invoked).
 ///
-/// This is what is stored in [BotState](crate::bot::BotState), so means that it can't have varying
-/// associated types ([Data](SlashCommand::Data) and [Use](SlashCommand::Use)) since it has to be
-/// object safe.
+/// This is what is stored in [BotState](crate::bot::BotState), which means that it can't have
+/// varying associated types ([Data](SlashCommand::Data) and [Use](SlashCommand::Use)) since it has
+/// to be object safe.
 ///
 /// This is implemented for all types which implement [SlashCommand].
 #[async_trait]
@@ -278,17 +277,6 @@ impl<C: SlashCommandRaw> SlashCommandExt for C {}
 pub trait ButtonCommand: Send + Sync + DynClone + Downcast {
     type Bot: Send + Sync;
 
-    fn style(&self) -> ButtonStyle {
-        ButtonStyle::Primary
-    }
-
-    // todo Cow<'static, str>?
-    fn label(&self) -> String;
-
-    fn emoji(&self) -> Option<Emoji> {
-        None
-    }
-
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<ButtonPressData, Unused>,
@@ -306,22 +294,10 @@ impl<'clone, B> Clone for Box<dyn ButtonCommand<Bot=B> + 'clone> {
 pub trait MenuCommandRaw: Send + Sync + DynClone + Downcast {
     type Bot: Send + Sync;
 
-    fn options(&self) -> Vec<SelectOption>;
-
-    fn placeholder(&self) -> Option<String> { None }
-
-    fn num_values(&self) -> (Option<u8>, Option<u8>) {
-        (None, None)
-    }
-
-    fn disabled(&self) -> bool {
-        false
-    }
-
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
-                 interaction: InteractionUse<MenuSelectData, Unused>,
-    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError>;
+                 interaction: InteractionUse<MenuSelectDataRaw, Unused>,
+    ) -> Result<InteractionUse<ComponentId, Used>, BotError>;
 }
 
 impl_downcast!(MenuCommandRaw assoc Bot);
@@ -337,24 +313,11 @@ pub trait MenuCommand: Send + Sync + DynClone + Downcast {
 
     type Data: MenuData + Send;
 
-    fn options(&self) -> Vec<SelectOption> {
-        Self::Data::options()
-    }
-
-    fn placeholder(&self) -> Option<String> { None }
-
-    fn num_values(&self) -> (Option<u8>, Option<u8>) {
-        (None, None)
-    }
-
-    fn disabled(&self) -> bool {
-        false
-    }
-
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
-                 interaction: InteractionUse<MenuSelectData<Self::Data>, Unused>,
-    ) -> Result<InteractionUse<MenuSelectData<Self::Data>, Used>, BotError>;
+                 interaction: InteractionUse<ComponentId, Unused>,
+                 data: Vec<Self::Data>,
+    ) -> Result<InteractionUse<ComponentId, Used>, BotError>;
 }
 
 // impl_downcast!(MenuCommand assoc Bot);
@@ -365,58 +328,29 @@ pub trait MenuCommand: Send + Sync + DynClone + Downcast {
 // }
 
 #[async_trait]
-impl<M: MenuCommand> MenuCommandRaw for M {
+impl<M: MenuCommand> MenuCommandRaw for M
+    where <M::Data as FromStr>::Err: Debug
+{
     type Bot = M::Bot;
-
-    fn options(&self) -> Vec<SelectOption> {
-        M::Data::options()
-    }
-
-    fn placeholder(&self) -> Option<String> {
-        M::placeholder(self)
-    }
-
-    fn num_values(&self) -> (Option<u8>, Option<u8>) {
-        M::num_values(self)
-    }
-
-    fn disabled(&self) -> bool {
-        M::disabled(self)
-    }
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
-                 InteractionUse { id, application_id, data, channel, source, token, _priv }: InteractionUse<MenuSelectData, Unused>,
-    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError> {
+                 InteractionUse { id, application_id, data, channel, source, token, _priv }: InteractionUse<MenuSelectDataRaw, Unused>,
+    ) -> Result<InteractionUse<ComponentId, Used>, BotError> {
         let interaction = InteractionUse {
             id,
             application_id,
-            data: MenuSelectData {
-                custom_id: data.custom_id,
-                values: data.values.into_iter()
-                    // todo this or crash?
-                    .flat_map(M::Data::from_string)
-                    .collect(),
-            },
+            data: data.custom_id,
             channel,
             source,
             token,
-            _priv
+            _priv,
         };
-        M::run(self, state, interaction).await
-            .map(|InteractionUse { id, application_id, data, channel, source, token, _priv }| InteractionUse {
-                id,
-                application_id,
-                data: MenuSelectData {
-                    custom_id: data.custom_id,
-                    values: data.values.into_iter()
-                        .map(M::Data::into_string)
-                        .collect(),
-                },
-                channel,
-                source,
-                token,
-                _priv
-            })
+        let data = data.values.into_iter()
+            .map(|string| string.parse())
+            // todo handle errors better maybe
+            .map(Result::unwrap)
+            .collect();
+        M::run(self, state, interaction, data).await
     }
 }

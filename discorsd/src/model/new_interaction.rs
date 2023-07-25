@@ -451,26 +451,57 @@ impl Id for PartialChannel {
 serde_num_tag! { just Deserialize =>
     #[derive(Debug, Clone)]
     pub enum MessageComponentData = "component_type": ComponentType {
-        (ComponentType::Button) = Button {
-            /// the custom_id of the component
-            custom_id: ComponentId,
-        },
-        (ComponentType::StringMenu) = StringMenu(MenuData<String>),
+        (ComponentType::Button) = Button(ButtonPressData),
+        (ComponentType::StringMenu) = StringMenu(MenuSelectDataRaw),
         (ComponentType::TextInput) = TextInput,
-        (ComponentType::UserMenu) = UserMenu(MenuData<UserId>),
-        (ComponentType::RoleMenu) = RoleMenu(MenuData<RoleId>),
-        (ComponentType::MentionableMenu) = MentionableMenu(MenuData<MentionableId>),
-        (ComponentType::ChannelMenu) = ChannelMenu(MenuData<ChannelId>),
+        (ComponentType::UserMenu) = UserMenu(MenuSelectDataRaw),
+        (ComponentType::RoleMenu) = RoleMenu(MenuSelectDataRaw),
+        (ComponentType::MentionableMenu) = MentionableMenu(MenuSelectDataRaw),
+        (ComponentType::ChannelMenu) = ChannelMenu(MenuSelectDataRaw),
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct MenuData<T> {
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct ButtonPressData {
+    /// the custom_id of the component
+    pub custom_id: ComponentId,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct MenuSelectData<T> {
     /// the custom_id of the component
     pub custom_id: ComponentId,
     /// values the user selected in a select menu component
     pub values: Vec<T>,
 }
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct MenuSelectDataRaw {
+    /// the custom_id of the component
+    pub custom_id: ComponentId,
+    /// values the user selected in a select menu component
+    /// Takes advantage of String & Id's all being sent by Discord as strings in the json
+    pub values: Vec<String>,
+}
+
+// macro_rules! from_menu {
+//     ($($d:ty => $var:ident);+ $(;)?) => {
+//         $(
+//             impl From<MenuSelectData<$d>> for MenuSelectDataRaw {
+//                 fn from(v: MenuSelectData<$d>) -> Self {
+//                     Self::$var(v)
+//                 }
+//             }
+//         )+
+//     };
+// }
+// from_menu! {
+//     String => StringMenu;
+//     UserId => UserMenu;
+//     RoleId => RoleMenu;
+//     MentionableId => MentionableMenu;
+//     ChannelId => ChannelMenu;
+// }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ModalSubmitData {
