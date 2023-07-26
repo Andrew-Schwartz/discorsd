@@ -219,7 +219,7 @@ pub struct Menu<T: SelectMenuType> {
     pub(crate) custom_id: ComponentId,
     /// the choices in the select, max 25
     #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
-    options: T::SelectOptions,
+    pub(crate) options: T::SelectOptions,
     /// List of channel types to include
     #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
     channel_types: T::ChannelTypes,
@@ -263,6 +263,13 @@ impl<T: SelectMenuType> Menu<T> {
     /// the maximum number of items that can be chosen; default 1, max 25
     pub fn max_values(&mut self, max: usize) {
         self.max_values = Some(max)
+    }
+
+    /// the minimum (default 1, min 0, max 25) and maximum (default 1, max 25) number of items that
+    /// can be chosen
+    pub fn min_max_values(&mut self, min: usize, max: usize) {
+        self.min_values(min);
+        self.max_values(max);
     }
 
     /// disable the select menu, default false

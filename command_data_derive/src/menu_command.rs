@@ -24,14 +24,6 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
         }
     });
 
-    // let branches_from = variants.iter().map(|v| {
-    //     let str = &v.ident_str;
-    //     let ident = &v.ident;
-    //     quote_spanned! { v.span() =>
-    //         #str => std::option::Option::Some(Self::#ident)
-    //     }
-    // });
-
     let from_str_branches = variants.iter().map(|v| {
         let str = &v.ident_str;
         let ident = &v.ident;
@@ -40,18 +32,9 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
         }
     });
 
-    // let branches_into = variants.iter().map(|v| {
-    //     let ident = &v.ident;
-    //     let str = &v.ident_str;
-    //     quote_spanned! { v.span() =>
-    //         Self::#ident => #str.to_string()
-    //     }
-    // });
-
     let display_branches = variants.iter().map(|v| {
         let ident = &v.ident;
-        let display = &v.ident_str;
-        // let display = v.display();
+        let display = v.display();
         quote_spanned! { v.ident.span() =>
             Self::#ident => f.write_str(#display)
         }
@@ -85,26 +68,7 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
                     #(#options),*
                 ]
             }
-
-            // fn from_string(string: String) -> Option<Self> {
-            //     match string.as_str() {
-            //         #(#branches_from,)*
-            //         _ => ::std::option::Option::None,
-            //     }
-            // }
-
-            // fn into_string(self) -> String {
-            //     match self {
-            //         #(#branches_into,)*
-            //     }
-            // }
         }
-
-        // impl ::discorsd::model::components::SelectMenuType for #ty {
-        //     // all MenuData enums have options
-        //     type SelectOptions = ::std::vec::Vec<::discorsd::model::components::SelectOption>;
-        //     type ChannelTypes = ();
-        // }
     }
 }
 
@@ -141,7 +105,7 @@ impl From<syn::Variant> for Variant {
             label: None,
         };
         attrs.iter()
-            .filter(|a| a.path.is_ident("command"))
+            .filter(|a| a.path.is_ident("menu"))
             .for_each(|a| variant.handle_attribute(a));
         variant
     }

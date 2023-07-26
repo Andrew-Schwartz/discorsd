@@ -208,6 +208,7 @@ impl InteractionMessage {
               F: FnOnce(&mut Menu<D::Data>),
     {
         let mut menu = Menu::<D::Data>::new();
+        menu.options = D::options();
         builder(&mut menu);
         state.as_ref().register_menu(&mut menu, Box::new(command));
         self.components.push(ActionRow::menu(menu))

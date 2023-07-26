@@ -17,7 +17,7 @@ use crate::errors::*;
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::interaction::WebhookMessage;
 use crate::model::{ids::*, new_command, new_interaction};
-use crate::model::components::{ComponentId, SelectMenuType, SelectOption};
+use crate::model::components::{ComponentId, SelectMenuType};
 use crate::model::guild::GuildMember;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{Attachment, Message};
@@ -1219,14 +1219,14 @@ impl<T, C, const N: usize> CommandData<C> for [T; N]
 pub trait MenuData: Sized + FromStr {
     type Data: SelectMenuType;
 
-    fn options() -> Vec<SelectOption>;
+    fn options() -> <Self::Data as SelectMenuType>::SelectOptions;
 }
 macro_rules! id_menu {
     ($($id:ty),+ $(,)?) => {
         $(
             impl MenuData for $id {
                 type Data = $id;
-                fn options() -> Vec<SelectOption> { unreachable!() }
+                fn options() { }
             }
         )+
     };
