@@ -4,6 +4,7 @@ use crate::cache::Cache;
 use crate::model::channel::Channel;
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
+use crate::model::new_interaction::Token;
 
 #[derive(Debug, Clone)]
 pub enum Route {
@@ -44,12 +45,12 @@ pub enum Route {
     EditGuildCommand(ApplicationId, GuildId, CommandId),
     DeleteGuildCommand(ApplicationId, GuildId, CommandId),
     BulkOverwriteGuildCommands(ApplicationId, GuildId),
-    CreateInteractionResponse(InteractionId, String),
-    EditInteractionResponse(ApplicationId, String),
-    DeleteInteractionResponse(ApplicationId, String),
-    CreateFollowupMessage(ApplicationId, String),
-    EditFollowupMessage(ApplicationId, String, MessageId),
-    DeleteFollowupMessage(ApplicationId, String, MessageId),
+    CreateInteractionResponse(InteractionId, Token),
+    EditInteractionResponse(ApplicationId, Token),
+    DeleteInteractionResponse(ApplicationId, Token),
+    CreateFollowupMessage(ApplicationId, Token),
+    EditFollowupMessage(ApplicationId, Token, MessageId),
+    DeleteFollowupMessage(ApplicationId, Token, MessageId),
     GetGuildApplicationCommandPermissions(ApplicationId, GuildId),
     GetApplicationCommandPermissions(ApplicationId, GuildId, CommandId),
     EditApplicationCommandPermissions(ApplicationId, GuildId, CommandId),

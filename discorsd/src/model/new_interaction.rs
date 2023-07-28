@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::{self, Display};
+use std::fmt::{self, Display, Formatter};
 use std::iter;
 use std::vec::Drain;
 
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::IdMap;
 use crate::model::channel::ChannelType;
@@ -90,6 +90,16 @@ impl ApplicationCommandData {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct Token(pub String);
+
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct InteractionData<Data> {
     /// ID of the interaction
@@ -97,7 +107,7 @@ pub struct InteractionData<Data> {
     /// ID of the application this interaction is for
     pub application_id: ApplicationId,
     /// Continuation token for responding to the interaction
-    pub token: String,
+    pub token: Token,
     /// Channel that the interaction was sent from
     pub channel_id: ChannelId,
     // /// partial Channel that the interaction was sent from
@@ -166,7 +176,7 @@ pub enum InteractionUser {
 
 // for Error usage
 impl Display for InteractionUser {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }

@@ -24,6 +24,7 @@ use crate::model::message::{Attachment, Message};
 use crate::model::new_command::{Choice, CommandOption as NewCommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
 use crate::model::new_interaction::{ButtonPressData, DmUser, GuildUser, InteractionDataOption as NewInteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw};
 use crate::model::user::User;
+use crate::model::new_interaction::Token;
 
 pub trait Usability: PartialEq {}
 
@@ -108,7 +109,7 @@ pub struct InteractionUse<Data: InteractionPayload, Usability: self::Usability> 
     pub channel: ChannelId,
     pub source: InteractionUser,
     /// a continuation token for responding to the interaction
-    pub token: String,
+    pub token: Token,
     pub(crate) _priv: PhantomData<Usability>,
 }
 
@@ -158,7 +159,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
         data: Data,
         channel: ChannelId,
         source: InteractionUser,
-        token: String,
+        token: Token,
     ) -> Self {
         Self {
             id,
@@ -178,7 +179,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
         let client = client.as_ref();
         client.create_interaction_response(
             self.id,
-            &self.token,
+            self.token.clone(),
             InteractionResponse::ChannelMessageWithSource(message.into()),
         ).await.map(|_| self.into())
     }
@@ -187,7 +188,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
         let client = client.as_ref();
         client.create_interaction_response(
             self.id,
-            &self.token,
+            self.token.clone(),
             InteractionResponse::DeferredChannelMessageWithSource,
         ).await.map(|_| self.into())
     }
@@ -210,7 +211,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Used> {
         let state = state.as_ref();
         state.client.edit_interaction_response(
             state.application_id(),
-            &self.token,
+            self.token.clone(),
             message.into(),
         ).await?;
         Ok(())
@@ -224,7 +225,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Used> {
         let state = state.as_ref();
         state.client.delete_interaction_response(
             state.application_id(),
-            &self.token,
+            self.token,
         ).await
     }
 
@@ -236,7 +237,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Used> {
         let state = state.as_ref();
         state.client.create_followup_message(
             state.application_id(),
-            &self.token,
+            self.token.clone(),
             message.into(),
         ).await
     }
@@ -252,7 +253,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Deferred> {
         let state = state.as_ref();
         state.client.create_followup_message(
             state.application_id(),
-            &self.token,
+            self.token.clone(),
             message.into(),
         ).await
     }
@@ -265,7 +266,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Deferred> {
         let state = state.as_ref();
         state.client.edit_interaction_response(
             state.application_id(),
-            &self.token,
+            self.token.clone(),
             message.into(),
         ).await?;
         Ok(self.into())
@@ -278,7 +279,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Deferred> {
         let state = state.as_ref();
         state.client.delete_interaction_response(
             state.application_id(),
-            &self.token,
+            self.token.clone(),
         ).await?;
         Ok(self.into())
     }
@@ -294,7 +295,7 @@ impl<C: ComponentData, U: Usability> InteractionUse<C, U>
         let client = client.as_ref();
         client.create_interaction_response(
             self.id,
-            &self.token,
+            self.token.clone(),
             InteractionResponse::UpdateMessage(message.into()),
         ).await.map(|_| self.into())
     }
@@ -305,7 +306,7 @@ impl<C: ComponentData, U: Usability> InteractionUse<C, U>
         let client = client.as_ref();
         client.create_interaction_response(
             self.id,
-            &self.token,
+            self.token.clone(),
             InteractionResponse::DeferredUpdateMessage,
         ).await.map(|_| self.into())
     }

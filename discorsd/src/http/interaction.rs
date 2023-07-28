@@ -18,6 +18,7 @@ use crate::model::interaction_response::{InteractionMessage, InteractionResponse
 use crate::model::message::{AllowedMentions, Message, MessageFlags};
 use crate::model::new_command;
 use crate::model::new_command::{ApplicationCommand, Command};
+use crate::model::new_interaction::Token;
 
 impl DiscordClient {
     /// Fetch all of the global commands for your application.
@@ -292,7 +293,7 @@ impl DiscordClient {
     pub async fn create_interaction_response(
         &self,
         interaction: InteractionId,
-        token: &str,
+        token: Token,
         response: InteractionResponse,
     ) -> ClientResult<InteractionResponse> {
         // match response {
@@ -300,7 +301,7 @@ impl DiscordClient {
         //     | InteractionResponse::DeferredChannelMessageWithSource
         //     | InteractionResponse::DeferredUpdateMessage => {
         //         self.post_unit(
-        //             CreateInteractionResponse(interaction, token.into()),
+        //             CreateInteractionResponse(interaction, token),
         //             &response,
         //         ).await.map(|()| response)
         //     }
@@ -310,7 +311,7 @@ impl DiscordClient {
         //     }
         // }
         self.send_message_with_files(
-            CreateInteractionResponse(interaction, token.into()),
+            CreateInteractionResponse(interaction, token),
             response.clone(),
         ).await.map(|()| response)
         // // todo here (or elsewhere ig) validate InteractionResponse!!!
@@ -319,7 +320,7 @@ impl DiscordClient {
         // //   although it kinda already is iirc
         // //   wtf am I talking about here I'm confused
         // self.post_unit(
-        //     CreateInteractionResponse(interaction, token.into()),
+        //     CreateInteractionResponse(interaction, token),
         //     &response,
         // ).await.map(|()| response)
     }
@@ -333,11 +334,11 @@ impl DiscordClient {
     pub async fn edit_interaction_response(
         &self,
         application: ApplicationId,
-        token: &str,
+        token: Token,
         message: InteractionMessage,
     ) -> ClientResult<Message> {
         self.patch(
-            EditInteractionResponse(application, token.into()),
+            EditInteractionResponse(application, token),
             &message,
         ).await
     }
@@ -350,9 +351,9 @@ impl DiscordClient {
     pub async fn delete_interaction_response(
         &self,
         application: ApplicationId,
-        token: &str,
+        token: Token,
     ) -> ClientResult<()> {
-        self.delete(DeleteInteractionResponse(application, token.into())).await
+        self.delete(DeleteInteractionResponse(application, token)).await
     }
 
     // todo link
@@ -364,10 +365,10 @@ impl DiscordClient {
     pub async fn create_followup_message(
         &self,
         application: ApplicationId,
-        token: &str,
+        token: Token,
         message: WebhookMessage,
     ) -> ClientResult<Message> {
-        self.send_message_with_files(CreateFollowupMessage(application, token.into()), message).await
+        self.send_message_with_files(CreateFollowupMessage(application, token), message).await
     }
 
     // todo link
@@ -379,12 +380,12 @@ impl DiscordClient {
     pub async fn edit_followup_message(
         &self,
         application: ApplicationId,
-        token: &str,
+        token: Token,
         message: MessageId,
         edit: WebhookMessage,
     ) -> ClientResult<Message> {
         self.patch(
-            EditFollowupMessage(application, token.into(), message),
+            EditFollowupMessage(application, token, message),
             &edit,
         ).await
     }
@@ -397,10 +398,10 @@ impl DiscordClient {
     pub async fn delete_followup_message(
         &self,
         application: ApplicationId,
-        token: &str,
+        token: Token,
         message: MessageId,
     ) -> ClientResult<()> {
-        self.delete(DeleteFollowupMessage(application, token.into(), message)).await
+        self.delete(DeleteFollowupMessage(application, token, message)).await
     }
 }
 
