@@ -24,7 +24,7 @@ use tokio::sync::{RwLock, RwLockWriteGuard};
 use crate::cache::Cache;
 use crate::commands::{ButtonCommand, MenuCommandRaw, ReactionCommand, SlashCommand, SlashCommandRaw};
 use crate::errors::BotError;
-use crate::http::DiscordClient;
+use crate::http::{ClientResult, DiscordClient};
 use crate::model::commands::{InteractionUse, SlashCommandData};
 use crate::model::components::{Button, ComponentId, Menu, SelectMenuType};
 use crate::model::guild::{Guild, Integration};
@@ -90,34 +90,36 @@ impl<B: Send + Sync + 'static> BotState<B> {
         self.menus.write().unwrap().insert(id, command);
     }
 
-    // pub(crate) fn make_string_menu(&self, menu: Box<dyn MenuCommandRaw<Bot=B>>) -> Menu<String> {
-    //     let count = self.count.fetch_add(1, Ordering::Relaxed);
-    //     let id: ComponentId = count.to_string().into();
-    //     let (min_values, max_values) = menu.num_values();
-    //     let component = Menu {
-    //         custom_id: id.clone(),
-    //         options: menu.options(),
-    //         channel_types: (),
-    //         placeholder: menu.placeholder(),
-    //         min_values,
-    //         max_values,
-    //         disabled: menu.disabled(),
-    //     };
-    //     self.menus.write().unwrap().insert(id, menu);
-    //     component
-    // }
-
-    // pub fn button<Btn: ButtonCommand<Bot=B>>(&self, id: &ComponentId) -> Option<&mut Btn> {
-    //     self.buttons.write().unwrap()
-    //         .get_mut(id)
-    //         .and_then(|btn| btn.downcast_mut::<Btn>())
-    // }
-    //
-    // pub fn menu<M: MenuCommand<Bot=B>>(&self, id: &ComponentId) -> Option<&mut M> {
-    //     self.menus.write().unwrap()
-    //         .get_mut(id)
-    //         .and_then(|menu| menu.downcast_mut::<M>())
-    // }
+    pub async fn register_guild_commands<G: Id<Id=GuildId>, I: IntoIterator<Item=Box<dyn SlashCommandRaw<Bot=B>>>>(
+        &self,
+        guild: G,
+        commands: I,
+    ) -> ClientResult<()> {
+        let guild = guild.id();
+        for command in commands {
+            let application_command = self.client.create_guild_command(
+                self.cache.application_id(),
+                guild,
+                command.command(),
+            ).await?;
+            let name = command.name();
+            self.commands.write()
+                .await
+                .entry(guild)
+                .or_default()
+                .write()
+                .await
+                .insert(application_command.id, command);
+            self.command_names.write()
+                .await
+                .entry(guild)
+                .or_default()
+                .write()
+                .await
+                .insert(name, application_command.id);
+        }
+        Ok(())
+    }
 }
 
 impl<B: Send + Sync> AsRef<Self> for BotState<B> {
@@ -467,77 +469,6 @@ pub trait BotExt: Bot + 'static {
             new_interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),
             new_interaction::Interaction::ModalSubmit(_) => todo!(),
         }
-        // let Interaction {
-        //     id,
-        //     application_id,
-        //     kind: _kind,
-        //     data,
-        //     source,
-        //     channel_id,
-        //     token,
-        // } = interaction;
-        // match data {
-        //     InteractionData::ApplicationCommand(data) => {
-        //         let interaction = InteractionUse::new(
-        //             id,
-        //             application_id,
-        //             SlashCommandData { command: data.id, command_name: data.name },
-        //             channel_id,
-        //             source,
-        //             token,
-        //         );
-        //         let command = state.global_commands.get().unwrap().get(&data.id);
-        //         if let Some(command) = command {
-        //             command.run(Arc::clone(&state), interaction, data.options).await?;
-        //         } else {
-        //             let command = {
-        //                 let guard = state.commands.read().await;
-        //                 // todo fix this unwrap lol
-        //                 let commands = guard.get(&interaction.guild().unwrap()).unwrap().read().await;
-        //                 commands.get(&data.id).cloned()
-        //             };
-        //             if let Some(command) = command {
-        //                 command.run(Arc::clone(&state), interaction, data.options).await?;
-        //             }
-        //         }
-        //     }
-        //     InteractionData::MessageComponentCommand(data) => {
-        //         match data.component_type {
-        //             2 => {
-        //                 let command = state.buttons.read().unwrap().get(&data.custom_id).cloned();
-        //                 if let Some(command) = command {
-        //                     let interaction = InteractionUse::new(
-        //                         id,
-        //                         application_id,
-        //                         ButtonPressData { custom_id: data.custom_id },
-        //                         channel_id,
-        //                         source,
-        //                         token,
-        //                     );
-        //                     command.run(Arc::clone(&state), interaction).await?;
-        //                 }
-        //             }
-        //             3 => {
-        //                 let command = state.menus.read().unwrap().get(&data.custom_id).cloned();
-        //                 if let Some(command) = command {
-        //                     let interaction = InteractionUse::new(
-        //                         id,
-        //                         application_id,
-        //                         MenuSelectData { custom_id: data.custom_id, values: data.values },
-        //                         channel_id,
-        //                         source,
-        //                         token,
-        //                     );
-        //                     command.run(Arc::clone(&state), interaction).await?;
-        //                 }
-        //             }
-        //             _bad => todo!(),
-        //         }
-        //     }
-        //     InteractionData::MessageCommand { .. } => todo!(),
-        //     InteractionData::UserCommand { .. } => todo!(),
-        // }
-
         Ok(())
     }
 }

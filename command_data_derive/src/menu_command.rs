@@ -1,24 +1,47 @@
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{TokenStream as TokenStream2, TokenStream};
 use proc_macro_error::abort;
 use quote::{quote, quote_spanned};
-use syn::{DataEnum, Ident, LitStr};
+use syn::{Attribute, DataEnum, Ident, LitStr};
 
-pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
+pub fn menu_impl(ty: &Ident, data: DataEnum, attrs: Vec<Attribute>) -> TokenStream2 {
+    let mut enm = Enum { skip_display: false };
+    attrs.iter()
+        .filter(|a| a.path.is_ident("menu"))
+        .for_each(|a| enm.handle_attribute(a));
+
     let variants: Vec<_> = data.variants
         .into_iter()
         .map(Variant::from)
         .collect();
 
+    let into_branches = variants.iter().map(|v| {
+        let ident = &v.ident;
+        let value = &v.ident_str;
+        let label = v.display();
+        let desc = v.desc();
+        // todo allow for setting description, emoji, etc
+        quote_spanned! { v.ident.span() =>
+            Self::#ident => ::discorsd::model::components::SelectOption {
+                label: #label.to_string(),
+                value: #value.to_string(),
+                description: #desc,
+                emoji: ::std::option::Option::None,
+                default: false,
+            }
+        }
+    });
+
     let options = variants.iter().map(|v| {
         let value = &v.ident_str;
         let label = v.display();
+        let desc = v.desc();
         // todo allow for setting description, emoji, etc
         quote_spanned! { v.ident.span() =>
             ::discorsd::model::components::SelectOption {
                 label: #label.to_string(),
                 value: #value.to_string(),
-                description: std::option::Option::None,
-                emoji: std::option::Option::None,
+                description: #desc,
+                emoji: ::std::option::Option::None,
                 default: false,
             }
         }
@@ -32,13 +55,26 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
         }
     });
 
-    let display_branches = variants.iter().map(|v| {
-        let ident = &v.ident;
-        let display = v.display();
-        quote_spanned! { v.ident.span() =>
-            Self::#ident => f.write_str(#display)
+    let display_impl = if enm.skip_display {
+        TokenStream::new()
+    } else {
+        let display_branches = variants.iter().map(|v| {
+            let ident = &v.ident;
+            let display = v.display();
+            quote_spanned! { v.ident.span() =>
+                Self::#ident => f.write_str(#display)
+            }
+        });
+        quote! {
+            impl ::std::fmt::Display for #ty {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    match self {
+                        #(#display_branches,)*
+                    }
+                }
+            }
         }
-    });
+    };
 
     quote! {
         impl ::std::str::FromStr for #ty {
@@ -52,17 +88,16 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
             }
         }
 
-        impl ::std::fmt::Display for #ty {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                match self {
-                    #(#display_branches,)*
-                }
-            }
-        }
+        #display_impl
 
         impl ::discorsd::commands::MenuData for #ty {
             type Data = ::std::string::String;
 
+            fn into_option(self) -> ::discorsd::model::components::SelectOption {
+                match self {
+                    #(#into_branches),*
+                }
+            }
             fn options() -> ::std::vec::Vec<::discorsd::model::components::SelectOption> {
                 vec![
                     #(#options),*
@@ -72,11 +107,16 @@ pub fn menu_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
     }
 }
 
+pub struct Enum {
+    pub skip_display: bool,
+}
+
 #[derive(Debug)]
 pub struct Variant {
     ident: Ident,
     ident_str: String,
     pub label: Option<LitStr>,
+    pub description: Option<LitStr>,
 }
 
 impl Variant {
@@ -85,6 +125,15 @@ impl Variant {
             lit.value()
         } else {
             self.ident.to_string()
+        }
+    }
+
+    fn desc(&self) -> TokenStream2 {
+        if let Some(desc) = &self.description {
+            let desc = desc.value();
+            quote! { ::std::option::Option::Some(#desc.into()) }
+        } else {
+            quote! { ::std::option::Option::None }
         }
     }
 }
@@ -103,6 +152,7 @@ impl From<syn::Variant> for Variant {
             ident: variant.ident,
             ident_str,
             label: None,
+            description: None,
         };
         attrs.iter()
             .filter(|a| a.path.is_ident("menu"))

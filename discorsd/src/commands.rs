@@ -15,12 +15,11 @@ use crate::BotState;
 use crate::errors::{BotError, CommandParseErrorInfo};
 use crate::http::ClientResult;
 pub use crate::model::commands::*;
-use crate::model::components::ComponentId;
 use crate::model::ids::{CommandId, GuildId};
 use crate::model::interaction_response::ephemeral;
 use crate::model::new_command;
 use crate::model::new_command::{ApplicationCommand, Command};
-use crate::model::new_interaction::{ButtonPressData, InteractionOption, MenuSelectDataRaw};
+use crate::model::new_interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw};
 use crate::shard::dispatch::ReactionUpdate;
 
 /// The trait to implement to define a Slash Command.
@@ -297,7 +296,7 @@ pub trait MenuCommandRaw: Send + Sync + DynClone + Downcast {
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<MenuSelectDataRaw, Unused>,
-    ) -> Result<InteractionUse<ComponentId, Used>, BotError>;
+    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError>;
 }
 
 impl_downcast!(MenuCommandRaw assoc Bot);
@@ -315,9 +314,9 @@ pub trait MenuCommand: Send + Sync + DynClone + Downcast {
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
-                 interaction: InteractionUse<ComponentId, Unused>,
+                 interaction: InteractionUse<MenuSelectData, Unused>,
                  data: Vec<Self::Data>,
-    ) -> Result<InteractionUse<ComponentId, Used>, BotError>;
+    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError>;
 }
 
 // impl_downcast!(MenuCommand assoc Bot);
@@ -336,11 +335,14 @@ impl<M: MenuCommand> MenuCommandRaw for M
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  InteractionUse { id, application_id, data, channel, source, token, _priv }: InteractionUse<MenuSelectDataRaw, Unused>,
-    ) -> Result<InteractionUse<ComponentId, Used>, BotError> {
+    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError> {
         let interaction = InteractionUse {
             id,
             application_id,
-            data: data.custom_id,
+            data: MenuSelectData {
+                custom_id: data.custom_id,
+                resolved: data.resolved,
+            },
             channel,
             source,
             token,

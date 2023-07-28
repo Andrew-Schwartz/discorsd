@@ -323,13 +323,13 @@ pub struct Role {
 }
 id_impl!(Role => RoleId);
 
-pub trait RoleMarkupExt: Id<Id=RoleId> {
+pub trait RoleMarkup: Id<Id=RoleId> {
     fn mention(&self) -> String {
         format!("<@&{}>", self.id())
     }
 }
 
-impl<I: Id<Id=RoleId>> RoleMarkupExt for I {}
+impl<I: Id<Id=RoleId>> RoleMarkup for I {}
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct RoleTags {

@@ -2,15 +2,20 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt::Debug;
+use std::str::FromStr;
 
 use serde::Serialize;
 
+use crate::BotState;
+use crate::commands::{ButtonCommand, MenuCommand, MenuData};
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::http::routes::Route::*;
+use crate::model::components::{ActionRow, Button, Component, Menu};
 use crate::model::ids::*;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
-use crate::model::message::{AllowedMentions, Message};
+use crate::model::message::{AllowedMentions, Message, MessageFlags};
 use crate::model::new_command;
 use crate::model::new_command::{ApplicationCommand, Command};
 
@@ -106,7 +111,7 @@ impl DiscordClient {
         application: ApplicationId,
         commands: Vec<Command>,
     ) -> ClientResult<Vec<ApplicationCommand>> {
-    // ) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
+        // ) -> ClientResult<Vec<InteractionData<ApplicationCommandData>>> {
         self.put(BulkOverwriteGlobalCommands(application), commands).await
     }
 
@@ -376,12 +381,12 @@ impl DiscordClient {
         application: ApplicationId,
         token: &str,
         message: MessageId,
-        edit: InteractionResponse,
-    ) -> ClientResult<InteractionResponse> {
+        edit: WebhookMessage,
+    ) -> ClientResult<Message> {
         self.patch(
             EditFollowupMessage(application, token.into(), message),
             &edit,
-        ).await.map(|()| edit)
+        ).await
     }
 
     /// Deletes a followup message for an Interaction.
@@ -411,7 +416,7 @@ struct Edit<'a> {
     default_permission: Option<bool>,
 }
 
-#[derive(Serialize, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub struct WebhookMessage {
     /// the message contents (up to 2000 characters)
@@ -429,6 +434,12 @@ pub struct WebhookMessage {
     pub embeds: Vec<RichEmbed>,
     /// allowed mentions for the message
     pub allowed_mentions: Option<AllowedMentions>,
+    /// only [MessageFlags::EPHEMERAL] are allowed
+    #[serde(skip_serializing_if = "MessageFlags::is_empty")]
+    pub flags: MessageFlags,
+    /// the components to include with the message
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<ActionRow>,
 }
 
 pub fn webhook_message<F: FnOnce(&mut WebhookMessage)>(builder: F) -> WebhookMessage {
@@ -444,6 +455,30 @@ impl<S: Into<Cow<'static, str>>> From<S> for WebhookMessage {
 impl From<RichEmbed> for WebhookMessage {
     fn from(e: RichEmbed) -> Self {
         webhook_message(|m| m.embeds = vec![e])
+    }
+}
+
+impl From<InteractionMessage> for WebhookMessage {
+    fn from(InteractionMessage {
+                tts,
+                content,
+                embeds,
+                allowed_mentions,
+                flags,
+                components,
+                files
+            }: InteractionMessage) -> Self {
+        Self {
+            content,
+            username: None,
+            avatar_url: None,
+            tts,
+            files,
+            embeds,
+            allowed_mentions,
+            flags,
+            components,
+        }
     }
 }
 
@@ -509,5 +544,58 @@ impl WebhookMessage {
             self.embeds.push(embed(builder));
             Ok(())
         }
+    }
+
+    /// Attach an image to this message. See [`MessageAttachment`] for details about what types impl
+    /// `Into<MessageAttachment>`.
+    pub fn attachment<A: Into<MessageAttachment>>(&mut self, attachment: A) {
+        self.files.insert(attachment.into());
+    }
+
+    pub fn ephemeral(&mut self) {
+        self.flags.set(MessageFlags::EPHEMERAL, true);
+    }
+
+    pub fn button<B, State, C, F>(&mut self, state: State, command: C, builder: F)
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>>,
+              C: ButtonCommand<Bot=B>,
+              F: FnOnce(&mut Button),
+    {
+        let mut button = Button::new();
+        builder(&mut button);
+        state.as_ref().register_button(&mut button, Box::new(command));
+        self.components.push(ActionRow::buttons(vec![button]))
+        // self.buttons(iter::once(button))
+    }
+
+    pub fn buttons<B, State, I>(&mut self, state: State, buttons: I)
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>>,
+              I: IntoIterator<Item=(Box<dyn ButtonCommand<Bot=B>>, Button)>,
+    {
+        let buttons = buttons.into_iter()
+            .map(|(command, mut button)| {
+                state.as_ref().register_button(&mut button, command);
+                button
+            })
+            .collect();
+        self.components.push(ActionRow::buttons(buttons))
+    }
+
+    pub fn menu<B, State, C, F, D>(&mut self, state: State, command: C, builder: F)
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>>,
+              C: MenuCommand<Bot=B, Data=D>,
+              D: MenuData,
+              <D as FromStr>::Err: Debug,
+              Component: From<Menu<D::Data>>,
+              F: FnOnce(&mut Menu<D::Data>),
+    {
+        let mut menu = Menu::<D::Data>::new();
+        menu.options = D::options();
+        builder(&mut menu);
+        state.as_ref().register_menu(&mut menu, Box::new(command));
+        self.components.push(ActionRow::menu(menu))
     }
 }

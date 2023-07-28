@@ -225,7 +225,7 @@ pub struct DebugCache<'a> {
 }
 
 /// A map of objects, with keys given by the object's id
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IdMap<T: Id>(HashMap<T::Id, T>);
 
 #[allow(clippy::needless_pass_by_value)]

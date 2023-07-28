@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::BotState;
 use crate::commands::{ButtonCommand, MenuCommand, MenuData};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
-use crate::model::components::{ActionRow, Button, Component, ComponentId, Menu};
+use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, Menu};
 use crate::model::message::{AllowedMentions, MessageFlags};
 use crate::model::new_command::Choice;
 use crate::serde_utils::BoolExt;
@@ -177,8 +177,7 @@ impl InteractionMessage {
               C: ButtonCommand<Bot=B>,
               F: FnOnce(&mut Button),
     {
-        let mut button = Button::new();
-        builder(&mut button);
+        let mut button = make_button(builder);
         state.as_ref().register_button(&mut button, Box::new(command));
         self.components.push(ActionRow::buttons(vec![button]))
         // self.buttons(iter::once(button))

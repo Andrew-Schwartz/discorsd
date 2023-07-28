@@ -121,17 +121,13 @@ impl User {
     }
 }
 
-pub trait UserMarkupExt: Id<Id=UserId> {
+pub trait UserMarkup: Id<Id=UserId> {
     fn ping(&self) -> String {
         format!("<@{}>", self.id())
     }
-
-    fn ping_nick(&self) -> String {
-        format!("<@!{}>", self.id())
-    }
 }
 
-impl<I: Id<Id=UserId>> UserMarkupExt for I {}
+impl<I: Id<Id=UserId>> UserMarkup for I {}
 
 bitflags! {
     pub struct UserFlags: u32 {

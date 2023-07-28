@@ -3,7 +3,7 @@ use std::iter::FromIterator;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use proc_macro_error::emit_error;
 use quote::{quote, quote_spanned};
-use syn::{Attribute, Fields, Ident, Index, LitStr, Path, Type, TypeParam};
+use syn::{Attribute, Fields, Ident, Index, LitInt, LitStr, Path, Type, TypeParam};
 use syn::spanned::Spanned;
 
 use crate::utils::*;
@@ -60,6 +60,9 @@ pub struct Field {
     /// `fn<C: SlashCommand>(command: &C) -> bool`, where the generic is not necessary if the
     /// struct's type is specified (`#[command(type = "MyCommand")]`)
     pub required: Option<Path>,
+    // todo support LitFloat too
+    pub min_value: Option<LitInt>,
+    pub max_value: Option<LitInt>,
     /// see [Vararg](Vararg) for details
     pub vararg: Option<Vararg>,
     // todo now uses the enum type
@@ -277,6 +280,8 @@ impl From<syn::Field> for Field {
             retain: None,
             desc: None,
             required: None,
+            min_value: None,
+            max_value: None,
         };
 
         if field.ty.generic_type_of("Option").is_some() {
@@ -306,6 +311,8 @@ impl From<(usize, syn::Field)> for Field {
             retain: None,
             desc: None,
             required: None,
+            min_value: None,
+            max_value: None,
         };
 
         if field.ty.generic_type_of("Option").is_some() {

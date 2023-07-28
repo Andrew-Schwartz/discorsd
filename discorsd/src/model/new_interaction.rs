@@ -174,13 +174,29 @@ impl Display for InteractionUser {
 impl std::error::Error for InteractionUser {}
 
 impl InteractionUser {
+    /// Returns the [GuildUser](GuildUser) that used this command, if it was invoked in a guild
     pub fn guild(self) -> Option<GuildUser> {
         match self {
             Self::Guild(gs) => Some(gs),
             Self::Dm(_) => None,
         }
     }
+    /// Returns the [GuildUser](GuildUser) that used this command, if it was invoked in a guild
+    pub fn guild_ref(&self) -> Option<&GuildUser> {
+        match self {
+            Self::Guild(g) => Some(g),
+            Self::Dm(_) => None,
+        }
+    }
+    /// Returns the [User](User) that used this command, if it was invoked in a guild
     pub fn user(self) -> Option<User> {
+        match self {
+            Self::Guild(_) => None,
+            Self::Dm(DmUser { user }) => Some(user),
+        }
+    }
+    /// Returns the [User](User) that used this command, if it was invoked in a guild
+    pub fn user_ref(&self) -> Option<&User> {
         match self {
             Self::Guild(_) => None,
             Self::Dm(DmUser { user }) => Some(user),
@@ -389,24 +405,25 @@ pub struct DataOption<T: OptionType> {
     pub focused: bool,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Default, Clone, PartialEq)]
+#[serde(default)]
 pub struct ResolvedData {
     /// the ids and User objects
-    pub users: Option<IdMap<User>>,
+    pub users: IdMap<User>,
     /// the ids and partial Member objects
-    pub members: Option<HashMap<UserId, PartialGuildMember>>,
+    pub members: HashMap<UserId, PartialGuildMember>,
     /// the ids and Role objects
-    pub roles: Option<IdMap<Role>>,
+    pub roles: IdMap<Role>,
     /// the ids and partial Channel objects
-    pub channels: Option<IdMap<PartialChannel>>,
+    pub channels: IdMap<PartialChannel>,
     /// the ids and partial Message objects
     // todo what is in a partial message
-    pub messages: Option<IdMap<Message>>,
+    pub messages: IdMap<Message>,
     /// the ids and attachment objects
-    pub attachments: Option<IdMap<Attachment>>,
+    pub attachments: IdMap<Attachment>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct PartialGuildMember {
     /// this users guild nickname
     pub nick: Option<String>,
@@ -433,20 +450,7 @@ pub struct PartialChannel {
     /// Permissions for the channel
     pub permissions: Permissions,
 }
-
-impl PartialEq for PartialChannel {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Id for PartialChannel {
-    type Id = ChannelId;
-
-    fn id(&self) -> Self::Id {
-        self.id
-    }
-}
+id_impl!(PartialChannel => ChannelId);
 
 serde_num_tag! { just Deserialize =>
     #[derive(Debug, Clone)]
@@ -465,14 +469,8 @@ serde_num_tag! { just Deserialize =>
 pub struct ButtonPressData {
     /// the custom_id of the component
     pub custom_id: ComponentId,
-}
-
-#[derive(Deserialize, Debug, Clone, PartialEq)]
-pub struct MenuSelectData<T> {
-    /// the custom_id of the component
-    pub custom_id: ComponentId,
-    /// values the user selected in a select menu component
-    pub values: Vec<T>,
+    #[serde(default)]
+    pub resolved: ResolvedData,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -482,26 +480,16 @@ pub struct MenuSelectDataRaw {
     /// values the user selected in a select menu component
     /// Takes advantage of String & Id's all being sent by Discord as strings in the json
     pub values: Vec<String>,
+    #[serde(default)]
+    pub resolved: ResolvedData,
 }
 
-// macro_rules! from_menu {
-//     ($($d:ty => $var:ident);+ $(;)?) => {
-//         $(
-//             impl From<MenuSelectData<$d>> for MenuSelectDataRaw {
-//                 fn from(v: MenuSelectData<$d>) -> Self {
-//                     Self::$var(v)
-//                 }
-//             }
-//         )+
-//     };
-// }
-// from_menu! {
-//     String => StringMenu;
-//     UserId => UserMenu;
-//     RoleId => RoleMenu;
-//     MentionableId => MentionableMenu;
-//     ChannelId => ChannelMenu;
-// }
+#[derive(Debug, Clone, PartialEq)]
+pub struct MenuSelectData {
+    /// the custom_id of the component
+    pub custom_id: ComponentId,
+    pub resolved: ResolvedData,
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ModalSubmitData {

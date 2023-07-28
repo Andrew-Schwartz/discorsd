@@ -406,38 +406,6 @@ impl From<AnnouncementChannel> for Channel {
     }
 }
 
-// /// a channel in which game developers can
-// /// [sell their game on Discord](https://discord.com/developers/docs/game-and-server-management/special-channels)
-// ///
-// /// Bots can neither send or read messages from this channel type (as it is a store page).
-// // todo not sure if everything relevant is here
-// #[derive(Deserialize, Serialize, Debug, Clone)]
-// pub struct StoreChannel {
-//     /// the id of this channel
-//     pub id: ChannelId,
-//     /// the id of the guild
-//     pub guild_id: Option<GuildId>,
-//     /// sorting position of the channel
-//     pub position: u32,
-//     /// explicit permission overwrites for members and roles
-//     pub permission_overwrites: Vec<Overwrite>,
-//     /// the name of the channel (2-100 characters)
-//     pub name: String,
-//     /// whether the channel is nsfw
-//     #[serde(default)]
-//     pub nsfw: bool,
-//     /// id of the parent category for a channel (each parent category can contain up to 50 channels)
-//     pub parent_id: Option<ChannelId>,
-// }
-//
-// id_impl!(StoreChannel => id: ChannelId);
-//
-// impl From<StoreChannel> for Channel {
-//     fn from(c: StoreChannel) -> Self {
-//         Self::Store(c)
-//     }
-// }
-
 /// A channel that [users can follow and crosspost into their own server](https://support.discord.com/hc/en-us/articles/360032008192).
 ///
 /// Bots can post or publish messages in this type of channel if they have the proper permissions.
@@ -666,13 +634,13 @@ serde_repr! {
     }
 }
 
-pub trait ChannelMarkupExt: Id<Id=ChannelId> {
+pub trait ChannelMarkup: Id<Id=ChannelId> {
     fn mention(&self) -> String {
         format!("<#{}>", self.id())
     }
 }
 
-impl<I: Id<Id=ChannelId>> ChannelMarkupExt for I {}
+impl<I: Id<Id=ChannelId>> ChannelMarkup for I {}
 
 // #[derive(Serialize, Deserialize, Debug, Clone)]
 // // #[serde(try_from = "RawOverwrite")]

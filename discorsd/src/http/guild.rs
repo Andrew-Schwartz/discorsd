@@ -64,6 +64,8 @@ impl DiscordClient {
 //  mod level docs
 /// Guild related caching http requests
 impl<B: Send + Sync + 'static> BotState<B> {
+    /// Fetches the relevant guild member with Discord's API, then cache the result for future
+    /// reference before returning it.
     pub async fn cache_guild_member(&self, guild: GuildId, user: UserId) -> ClientResult<GuildMember> {
         let member = self.client.get_guild_member(guild, user).await?;
         let mut guard = self.cache.members.write().await;

@@ -41,10 +41,6 @@ impl ActionRow {
             .collect())
     }
 
-    pub fn string_menu(menu: Menu<String>) -> Self {
-        Self::action_row(vec![Component::SelectString(menu)])
-    }
-
     pub fn menu<T: SelectMenuType>(menu: Menu<T>) -> Self
         where Component: From<Menu<T>>,
     {
@@ -69,7 +65,6 @@ serde_repr! {
     }
 }
 
-// todo is this just serialize?
 serde_num_tag! {
     #[derive(Debug, Clone, PartialEq)]
     pub enum Component = "type": ComponentType {
@@ -103,7 +98,6 @@ from_menu! {
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-// todo should maybe be Arc??
 pub struct ComponentId(String);
 
 impl<S> From<S> for ComponentId
@@ -168,6 +162,12 @@ impl Button {
     }
 }
 
+pub fn make_button<F: FnOnce(&mut Button)>(builder: F) -> Button {
+    let mut button = Button::new();
+    builder(&mut button);
+    button
+}
+
 /*
 (\w+)\t\d\t([\w, ]+)\t(\w+)
 
@@ -192,21 +192,21 @@ serde_repr! {
 }
 
 pub trait SelectMenuType {
-    type SelectOptions: Default + SkipUnit;
+    type SelectOption: Serialize + for<'a> Deserialize<'a>;
     type ChannelTypes: Default + SkipUnit;
 }
 macro_rules! smt {
     ($($t:ty => $so:ty, $ct:ty);* $(;)?) => {
         $(
             impl SelectMenuType for $t {
-                type SelectOptions = $so;
+                type SelectOption = $so;
                 type ChannelTypes = $ct;
             }
         )*
     };
 }
 smt! {
-    String => Vec<SelectOption>, ();
+    String => SelectOption, ();
     UserId => (), ();
     RoleId => (), ();
     MentionableId => (), ();
@@ -219,7 +219,7 @@ pub struct Menu<T: SelectMenuType> {
     pub(crate) custom_id: ComponentId,
     /// the choices in the select, max 25
     #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
-    pub(crate) options: T::SelectOptions,
+    pub(crate) options: Vec<T::SelectOption>,
     /// List of channel types to include
     #[serde(default, skip_serializing_if = "SkipUnit::should_skip")]
     channel_types: T::ChannelTypes,
@@ -241,7 +241,7 @@ impl<T: SelectMenuType> Menu<T> {
     pub(crate) fn new() -> Self {
         Self {
             custom_id: ComponentId(String::new()),
-            options: T::SelectOptions::default(),
+            options: Vec::new(),
             channel_types: T::ChannelTypes::default(),
             placeholder: None,
             min_values: None,
@@ -282,6 +282,12 @@ impl Menu<String> {
     /// the choices in the select, max 25
     pub fn options(&mut self, options: Vec<SelectOption>) {
         self.options = options;
+    }
+
+    pub fn default_options<F: Fn(&str) -> bool>(&mut self, is_default: F) {
+        self.options.iter_mut()
+            .filter(|opt| is_default(&opt.value))
+            .for_each(|opt| opt.default = true);
     }
 }
 

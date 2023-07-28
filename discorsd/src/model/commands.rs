@@ -22,7 +22,7 @@ use crate::model::guild::GuildMember;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{Attachment, Message};
 use crate::model::new_command::{Choice, CommandOption as NewCommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
-use crate::model::new_interaction::{ButtonPressData, DmUser, GuildUser, InteractionDataOption as NewInteractionDataOption, InteractionOption, InteractionUser, MenuSelectDataRaw};
+use crate::model::new_interaction::{ButtonPressData, DmUser, GuildUser, InteractionDataOption as NewInteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw};
 use crate::model::user::User;
 
 pub trait Usability: PartialEq {}
@@ -70,6 +70,8 @@ impl<C: ComponentData> InteractionPayload for C {}
 impl ComponentData for ButtonPressData {}
 
 impl ComponentData for MenuSelectDataRaw {}
+
+impl ComponentData for MenuSelectData {}
 
 impl ComponentData for ComponentId {}
 
@@ -1219,14 +1221,16 @@ impl<T, C, const N: usize> CommandData<C> for [T; N]
 pub trait MenuData: Sized + FromStr {
     type Data: SelectMenuType;
 
-    fn options() -> <Self::Data as SelectMenuType>::SelectOptions;
+    fn into_option(self) -> <Self::Data as SelectMenuType>::SelectOption;
+    fn options() -> Vec<<Self::Data as SelectMenuType>::SelectOption>;
 }
 macro_rules! id_menu {
     ($($id:ty),+ $(,)?) => {
         $(
             impl MenuData for $id {
                 type Data = $id;
-                fn options() { }
+                fn into_option(self) -> () { unreachable!() }
+                fn options() -> Vec<()> { Vec::new() }
             }
         )+
     };

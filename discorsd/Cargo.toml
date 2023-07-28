@@ -9,7 +9,7 @@ command_data_derive = { path = "../command_data_derive" }
 itertools = "0.10.0"
 anyhow = "1.0.40"
 bitflags = "1.2.1"
-async-trait = "0.1.50"
+async-trait = "0.1.68"
 base64 = "0.13.0"
 rand = "0.8.3"
 num_enum = "0.5.1"

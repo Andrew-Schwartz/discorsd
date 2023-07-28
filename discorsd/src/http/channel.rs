@@ -6,8 +6,10 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
@@ -17,13 +19,14 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::BotState;
+use crate::commands::{ButtonCommand, MenuCommand, MenuData};
 use crate::http::{ClientError, DiscordClient};
 use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;
 use crate::http::routes::Route::*;
 use crate::http::routes::Route;
 use crate::model::channel::{AnnouncementChannel, Channel, DmChannel, GroupDmChannel, TextChannel};
-use crate::model::components::ActionRow;
+use crate::model::components::{ActionRow, Button, Component, Menu};
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
 use crate::model::interaction_response::InteractionResponse;
@@ -386,7 +389,7 @@ impl Message {
     /// # Errors
     ///
     /// See [`ChannelMessageId::delete`](ChannelMessageId)
-    pub async fn delete<Client: AsRef<DiscordClient> + Send>(self, client: Client) -> ClientResult<()> {
+    pub async fn delete<Client: AsRef<DiscordClient> + Send>(&mut self, client: Client) -> ClientResult<()> {
         self.cmid().delete(client).await
     }
 
@@ -584,7 +587,6 @@ pub struct CreateMessage {
     /// include to make your message a reply
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_reference: Option<MessageReference>,
-    // todo other new stuff
     /// sent if the message contains components like buttons, action rows, or other interactive components
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub components: Vec<ActionRow>,
@@ -756,32 +758,48 @@ impl CreateMessage {
         self.message_reference = Some(MessageReference::reply(message));
     }
 
-    // todo
-    // pub fn button<B, Btn>(&mut self, state: &BotState<B>, button: Btn)
-    //     where B: Send + Sync + 'static,
-    //           Btn: ButtonCommand<Bot=B> + 'static,
-    // {
-    //     self.buttons(state, [Box::new(button) as _])
-    // }
-    //
-    // pub fn buttons<B, I>(&mut self, state: &BotState<B>, buttons: I)
-    //     where B: Send + Sync + 'static,
-    //           I: IntoIterator<Item=Box<dyn ButtonCommand<Bot=B>>>,
-    // {
-    //     let mut component_buttons = Vec::new();
-    //     for button in buttons {
-    //         component_buttons.push(Button::new(state, button));
-    //     }
-    //     self.components.push(ActionRow::buttons(component_buttons));
-    // }
+    pub fn button<B, State, C, F>(&mut self, state: State, command: C, builder: F)
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>>,
+              C: ButtonCommand<Bot=B>,
+              F: FnOnce(&mut Button),
+    {
+        let mut button = Button::new();
+        builder(&mut button);
+        state.as_ref().register_button(&mut button, Box::new(command));
+        self.components.push(ActionRow::buttons(vec![button]))
+        // self.buttons(iter::once(button))
+    }
 
-    // pub fn menu<B, M>(&mut self, state: &BotState<B>, menu: M)
-    //     where B: Send + Sync + 'static,
-    //           M: MenuCommand<Bot=B> + 'static,
-    // {
-    //     let menu = state.make_string_menu(Box::new(menu));
-    //     self.components.push(ActionRow::menu(menu))
-    // }
+    pub fn buttons<B, State, I>(&mut self, state: State, buttons: I)
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>>,
+              I: IntoIterator<Item=(Box<dyn ButtonCommand<Bot=B>>, Button)>,
+    {
+        let buttons = buttons.into_iter()
+            .map(|(command, mut button)| {
+                state.as_ref().register_button(&mut button, command);
+                button
+            })
+            .collect();
+        self.components.push(ActionRow::buttons(buttons))
+    }
+
+    pub fn menu<B, State, C, F, D>(&mut self, state: State, command: C, builder: F)
+        where B: Send + Sync + 'static,
+              State: AsRef<BotState<B>>,
+              C: MenuCommand<Bot=B, Data=D>,
+              D: MenuData,
+              <D as FromStr>::Err: Debug,
+              Component: From<Menu<D::Data>>,
+              F: FnOnce(&mut Menu<D::Data>),
+    {
+        let mut menu = Menu::<D::Data>::new();
+        menu.options = D::options();
+        builder(&mut menu);
+        state.as_ref().register_menu(&mut menu, Box::new(command));
+        self.components.push(ActionRow::menu(menu))
+    }
 }
 
 /// A builder for an embed in a message.
@@ -1077,7 +1095,7 @@ impl RichEmbed {
     ///         ("inline 1", "inline value 1", true),
     ///         EmbedField::blank_inline_tuple(),
     ///         ("inline 2", "inline value 2", true),
-    ///     ].iter().copied())
+    ///     ].into_iter())
     /// });
     /// ```
     pub fn fields<F, I>(&mut self, fields: I)
@@ -1097,13 +1115,12 @@ impl RichEmbed {
 /// `Some(None)` => field is removed (at least one of `content`, `embed`) must be present on a message
 ///
 /// `Some(Some(foo))` => field is edited to be `foo`
-#[derive(Serialize, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
 pub struct EditMessage {
-    /// The new contents of the message.
+    /// The new contents of the message (up to 2000 characters)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<Option<Cow<'static, str>>>,
-    /// The new embed for the message.
-    // todo now an array
+    /// Up to 10 new embeds for the message (up to 6000 characters)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeds: Option<Vec<RichEmbed>>,
     /// Only [SUPPRESS_EMBEDS](MessageFlags::SUPPRESS_EMBEDS) can be set/unset, but trying to send
@@ -1113,6 +1130,10 @@ pub struct EditMessage {
     /// New allowed mentions
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_mentions: Option<AllowedMentions>,
+    /// New components to include with the message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub components: Option<Vec<ActionRow>>,
+    // todo files/attachments
 }
 
 impl<S: Into<Cow<'static, str>>> From<S> for EditMessage {
@@ -1137,6 +1158,20 @@ impl From<Message> for EditMessage {
             flags: (!message.flags.is_empty()).then_some(message.flags),
             // todo
             allowed_mentions: None,
+            components: Some(message.components),
+        }
+    }
+}
+
+impl From<CreateMessage> for EditMessage {
+    fn from(message: CreateMessage) -> Self {
+        Self {
+            content: Some(Some(message.content.into())),
+            embeds: Some(message.embeds.into_iter().map(RichEmbed::from).collect()),
+            flags: (!message.flags.is_empty()).then_some(message.flags),
+            // todo
+            allowed_mentions: None,
+            components: Some(message.components),
         }
     }
 }

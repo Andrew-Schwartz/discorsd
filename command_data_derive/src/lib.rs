@@ -442,6 +442,7 @@ use syn::{Lit, Meta, MetaList, MetaNameValue, NestedMeta};
 
 use enum_choices::Variant as ChoicesVariant;
 use menu_command::Variant as MenuVariant;
+use menu_command::Enum as MenuEnum;
 use enum_data::{Enum, Variant};
 use struct_data::*;
 
@@ -580,7 +581,7 @@ pub fn derive_menu(input: TokenStream) -> TokenStream {
             ty,
             "Can't derive `MenuCommand` on a Struct"
         ),
-        Data::Enum(data) => menu_command::menu_impl(&ty, data),
+        Data::Enum(data) => menu_command::menu_impl(&ty, data, input.attrs),
         Data::Union(_) => abort!(
             ty,
             "Can't derive `MenuCommand` on a Union"
@@ -706,7 +707,11 @@ handle_attribute! {
         ["va_names" => self.vararg.get_or_insert_with(Default::default).names = VarargNames::Function(str.parse()?)],
 
     " = {int}": Meta::NameValue(MetaNameValue { path, lit: Lit::Int(int), .. }), path =>
-        /// The number of vararg options to show.
+        /// The minimum value permitted for integer fields
+        ["min_value" => self.min_value = Some(int)]
+        /// The maximum value permitted for integer fields
+        ["max_value" => self.max_value = Some(int)]
+        /// The number of vararg options to show.v
         ["va_count" => self.vararg.get_or_insert_with(Default::default).num = VarargNum::Count(int.base10_parse()?)]
         /// The number of vararg options required. If `va_count` is greater than this, the excess
         /// options will be optional.
@@ -840,5 +845,16 @@ handle_attribute! {
     self: MenuVariant =>
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), ..}), path =>
         /// The label to show in Discord for this choice, as well as for the `Display` impl
-        ["label" => self.label = Some(str)],
+        ["label" => self.label = Some(str)]
+        /// The description to show in Discord for this choice
+        ["desc" => self.description = Some(str)],
+}
+
+handle_attribute! {
+    /// Attributes on a MenuData enum
+    // todo
+    self: MenuEnum =>
+    "": Meta::Path(path), path =>
+        /// Don't impl Display for this type
+        ["skip_display" => self.skip_display = true],
 }

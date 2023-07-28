@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::convert::TryFrom;
+use std::fmt::{Display, Formatter, Write};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -771,6 +772,109 @@ pub enum AllowedMentionType {
     Users,
     /// Controls @everyone and @here mentions
     Everyone,
+}
+
+pub trait TextMarkup {
+    fn italicize(self) -> String;
+    fn bold(self) -> String;
+    fn underline(self) -> String;
+    fn code_inline(self) -> String;
+    fn code_block(self, lang: &str) -> String;
+}
+
+fn surround_string(mut string: String, surround: &str) -> String {
+    string.insert_str(0, surround);
+    string.push_str(surround);
+    string
+}
+
+impl TextMarkup for String {
+    fn italicize(self) -> String {
+        surround_string(self, "*")
+    }
+
+    fn bold(self) -> String {
+        surround_string(self, "**")
+    }
+
+    fn underline(self) -> String {
+        surround_string(self, "__")
+    }
+
+    fn code_inline(self) -> String {
+        surround_string(self, "`")
+    }
+
+    fn code_block(mut self, lang: &str) -> String {
+        self.insert_str(0, &format!("{lang}\n"));
+        surround_string(self, "```")
+    }
+}
+
+impl<'a> TextMarkup for &'a str {
+    fn italicize(self) -> String {
+        format!("*{self}*")
+    }
+
+    fn bold(self) -> String {
+        format!("**{self}**")
+    }
+
+    fn underline(self) -> String {
+        format!("__{self}__")
+    }
+
+    fn code_inline(self) -> String {
+        format!("`{self}`")
+    }
+
+    fn code_block(self, lang: &str) -> String {
+        format!("```{lang}\n{self}```")
+    }
+}
+
+#[derive(Default, Copy, Clone, Eq, PartialEq)]
+pub enum TimestampStyle {
+    /// 16:20
+    ShortTime,
+    /// 16:20:30
+    LongTime,
+    /// 20/04/2021
+    ShortDate,
+    /// 20 April 2021
+    LongDate,
+    /// 20 April 2021 16:20
+    #[default]
+    ShortDateTime,
+    /// Tuesday, 20 April 2021 16:20
+    LongDateTime,
+    /// 2 months ago
+    Relative,
+}
+
+impl Display for TimestampStyle {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ShortTime => f.write_char('t'),
+            Self::LongTime => f.write_char('T'),
+            Self::ShortDate => f.write_char('d'),
+            Self::LongDate => f.write_char('D'),
+            Self::ShortDateTime => f.write_char('f'),
+            Self::LongDateTime => f.write_char('F'),
+            Self::Relative => f.write_char('R'),
+        }
+    }
+}
+
+pub trait TimestampMarkup {
+    fn timestamp_styled(self, style: TimestampStyle) -> String;
+}
+
+impl TimestampMarkup for DateTime<Utc> {
+    fn timestamp_styled(self, style: TimestampStyle) -> String {
+        let timestamp = self.timestamp();
+        format!("<t:{timestamp}:{style}")
+    }
 }
 
 #[cfg(test)]
