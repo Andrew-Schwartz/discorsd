@@ -352,6 +352,7 @@ impl<B: Bot + 'static> Shard<B> {
 
             self.session_id = Some(ready.session_id.clone());
 
+            // todo add user and message commands
             if self.state.global_commands.get().is_none() {
                 let app = ready.application.id;
                 let client = &self.state.client;

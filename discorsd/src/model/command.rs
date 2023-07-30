@@ -112,6 +112,24 @@ impl Command {
             options,
         }
     }
+    pub fn user_command(
+        name: &'static str,
+    ) -> Self {
+        // todo validate
+        Self::UserCommand {
+            name: name.into(),
+            name_localizations: Default::default(),
+        }
+    }
+    pub fn message_command(
+        name: &'static str,
+    ) -> Self {
+        // todo validate
+        Self::MessageCommand {
+            name: name.into(),
+            name_localizations: Default::default(),
+        }
+    }
 }
 
 serde_num_tag! {

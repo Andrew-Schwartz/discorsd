@@ -22,10 +22,10 @@ use once_cell::sync::OnceCell;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::cache::Cache;
-use crate::commands::{ButtonCommand, MenuCommandRaw, ReactionCommand, SlashCommand, SlashCommandRaw};
+use crate::commands::{ButtonCommand, MenuCommandRaw, ReactionCommand, SlashCommand, SlashCommandRaw, UserCommand, MessageCommand};
 use crate::errors::BotError;
 use crate::http::{ClientResult, DiscordClient};
-use crate::model::commands::{InteractionUse, SlashCommandData};
+use crate::model::commands::{InteractionUse, AppCommandData};
 use crate::model::components::{Button, ComponentId, Menu, SelectMenuType};
 use crate::model::guild::{Guild, Integration};
 use crate::model::ids::*;
@@ -60,8 +60,16 @@ pub struct BotState<B: Send + Sync + 'static> {
     pub command_names: RwLock<GuildIdMap<HashMap<&'static str, CommandId>>>,
     /// The global [`SlashCommand`](SlashCommand)s your bot has created.
     pub global_commands: OnceCell<HashMap<CommandId, &'static dyn SlashCommandRaw<Bot=B>>>,
+    /// The global [`UserCommand`](UserCommand)s your bot has created.
+    pub global_user_commands: OnceCell<HashMap<CommandId, &'static dyn UserCommand<Bot=B>>>,
+    /// The global [`MessageCommand`](MessageCommand)s your bot has created.
+    pub global_message_commands: OnceCell<HashMap<CommandId, &'static dyn MessageCommand<Bot=B>>>,
     /// The global [`SlashCommand`](SlashCommand) ids your bot has created, by name.
     pub global_command_names: OnceCell<HashMap<&'static str, CommandId>>,
+    /// The global [`UserCommand`](UserCommand) ids your bot has created, by name.
+    pub global_user_command_names: OnceCell<HashMap<&'static str, CommandId>>,
+    /// The global [`MessageCommand`](MessageCommand) ids your bot has created, by name.
+    pub global_message_command_names: OnceCell<HashMap<&'static str, CommandId>>,
     /// The [`ReactionCommand`](ReactionCommand)s your bot is using.
     pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
     pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
@@ -129,6 +137,28 @@ impl<B: Send + Sync> AsRef<Self> for BotState<B> {
 }
 
 impl<B: Send + Sync> BotState<B> {
+    // todo
+    // #[cfg(test)]
+    pub fn testing_state(bot: B) -> Arc<Self> {
+        Arc::new(Self {
+            client: DiscordClient::single(String::new()),
+            cache: Default::default(),
+            bot,
+            commands: Default::default(),
+            command_names: Default::default(),
+            global_commands: Default::default(),
+            global_user_commands: Default::default(),
+            global_message_commands: Default::default(),
+            global_command_names: Default::default(),
+            global_user_command_names: Default::default(),
+            global_message_command_names: Default::default(),
+            reaction_commands: Default::default(),
+            buttons: Default::default(),
+            menus: Default::default(),
+            count: Default::default(),
+        })
+    }
+
     /// Gets the current [`User`](User).
     ///
     /// # Panics
@@ -201,6 +231,7 @@ impl<B: Send + Sync> BotState<B> {
             .get(C::NAME)
             .unwrap_or_else(|| panic!("{} exists", C::NAME))
     }
+    // todo are global_user_command_id and global_message_command_id needed?
 
     // bots can't use these
     // /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
@@ -317,6 +348,9 @@ pub trait Bot: Send + Sync + Sized {
     /// them when invoked.
     fn global_commands() -> &'static [&'static dyn SlashCommandRaw<Bot=Self>] { &[] }
 
+    fn global_user_commands() -> &'static [&'static dyn UserCommand<Bot=Self>] { &[] }
+    // todo add global_message_commands() and add shard\mod.rs global user and message commands
+
     fn guild_commands() -> Vec<Box<dyn SlashCommandRaw<Bot=Self>>> { Vec::new() }
 
     async fn ready(&self, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
@@ -376,7 +410,7 @@ pub trait BotExt: Bot + 'static {
                         let interaction = InteractionUse::new(
                             interaction_id,
                             application_id,
-                            SlashCommandData { command: id, command_name: name },
+                            AppCommandData { command: id, command_name: name },
                             channel_id,
                             user,
                             token,
@@ -395,9 +429,44 @@ pub trait BotExt: Bot + 'static {
                                 command.run(Arc::clone(&state), interaction, options).await?;
                             }
                         }
-                    }
-                    ApplicationCommandData::UserCommand { id, name, target_id, resolved } => todo!(),
-                    ApplicationCommandData::MessageCommand { .. } => todo!(),
+                    },
+                    ApplicationCommandData::UserCommand { id, name, target_id, resolved } => {
+                        let global_user_command = state.global_user_commands.get().unwrap().get(&id);
+                        if let Some(command) = global_user_command {
+                            let interaction = InteractionUse::new(
+                                interaction_id,
+                                application_id,
+                                AppCommandData { command: id, command_name: name },
+                                channel_id,
+                                user,
+                                token,
+                            );
+                            // todo double check this and rename variables?
+                            let target_user = resolved.users.get(target_id);
+                            if let Some(u) = target_user {
+                                let guild_member = resolved.members.get(&target_id);
+                                command.run(Arc::clone(&state), interaction, u.clone(), guild_member.cloned()).await?;
+                            }
+                        }
+                    },
+                    ApplicationCommandData::MessageCommand { id, name, target_id, resolved } => {
+                        let global_message_command = state.global_message_commands.get().unwrap().get(&id);
+                        if let Some(command) = global_message_command {
+                            let interaction = InteractionUse::new(
+                                interaction_id,
+                                application_id,
+                                AppCommandData { command: id, command_name: name },
+                                channel_id,
+                                user,
+                                token,
+                            );
+                            // todo double check this and rename variables?
+                            let target_message = resolved.messages.get(target_id);
+                            if let Some(m) = target_message {
+                                command.run(Arc::clone(&state), interaction, m.clone()).await?;
+                            }
+                        }
+                    },
                 }
             }
             interaction::Interaction::MessageComponent(data) => {
@@ -471,7 +540,11 @@ impl<B: Bot + 'static> From<B> for BotRunner<B> {
             commands: Default::default(),
             command_names: Default::default(),
             global_commands: Default::default(),
+            global_user_commands: Default::default(),
+            global_message_commands: Default::default(),
             global_command_names: Default::default(),
+            global_user_command_names: Default::default(),
+            global_message_command_names: Default::default(),
             reaction_commands: Default::default(),
             buttons: Default::default(),
             menus: Default::default(),

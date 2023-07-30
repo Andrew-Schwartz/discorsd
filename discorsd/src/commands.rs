@@ -19,7 +19,9 @@ use crate::model::ids::{CommandId, GuildId};
 use crate::model::interaction_response::ephemeral;
 use crate::model::command;
 use crate::model::command::{ApplicationCommand, Command};
-use crate::model::interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw};
+use crate::model::interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw, PartialGuildMember};
+use crate::model::message::Message;
+use crate::model::user::User;
 use crate::shard::dispatch::ReactionUpdate;
 
 /// The trait to implement to define a Slash Command.
@@ -67,9 +69,9 @@ use crate::shard::dispatch::ReactionUpdate;
 ///
 ///     async fn run(&self,
 ///                  state: Arc<BotState<MyBot>>,
-///                  interaction: InteractionUse<SlashCommandData, Unused>,
+///                  interaction: InteractionUse<AppCommandData, Unused>,
 ///                  data: Self::Data
-///     ) -> Result<InteractionUse<SlashCommandData, Self::Use>, BotError> {
+///     ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError> {
 ///         interaction.respond(state, format!("received data: {:?}", data))
 ///                    .await
 ///                    .map_err(|e| e.into())
@@ -118,15 +120,15 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     /// interaction.
     async fn run(&self,
                  state: Arc<BotState<<Self as SlashCommand>::Bot>>,
-                 interaction: InteractionUse<SlashCommandData, Unused>,
+                 interaction: InteractionUse<AppCommandData, Unused>,
                  data: Self::Data,
-    ) -> Result<InteractionUse<SlashCommandData, Self::Use>, BotError>;
+    ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError>;
 }
 
 #[allow(clippy::use_self)]
 #[async_trait]
 impl<SC: SlashCommand> SlashCommandRaw for SC
-    where InteractionUse<SlashCommandData, <Self as SlashCommand>::Use>: FinalizeInteraction<SlashCommandData>
+    where InteractionUse<AppCommandData, <Self as SlashCommand>::Use>: FinalizeInteraction<AppCommandData>
 {
     type Bot = <Self as SlashCommand>::Bot;
 
@@ -145,9 +147,9 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
-                 interaction: InteractionUse<SlashCommandData, Unused>,
+                 interaction: InteractionUse<AppCommandData, Unused>,
                  data: InteractionOption,
-    ) -> Result<InteractionUse<SlashCommandData, Used>, BotError> {
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError> {
         match <<Self as SlashCommand>::Data as CommandData<Self>>::Options::from_data_option(data) {
             Ok(options) => match <Self as SlashCommand>::Data::from_options(options) {
                 Ok(data) => {
@@ -205,9 +207,9 @@ pub trait SlashCommandRaw: Send + Sync + Debug + Downcast + DynClone {
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
-                 interaction: InteractionUse<SlashCommandData, Unused>,
+                 interaction: InteractionUse<AppCommandData, Unused>,
                  data: InteractionOption,
-    ) -> Result<InteractionUse<SlashCommandData, Used>, BotError>;
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError>;
 }
 impl_downcast!(SlashCommandRaw assoc Bot);
 
@@ -269,6 +271,59 @@ pub trait SlashCommandExt: SlashCommandRaw {
 
 #[async_trait]
 impl<C: SlashCommandRaw> SlashCommandExt for C {}
+
+#[async_trait]
+pub trait UserCommand: Send + Sync + DynClone + Downcast {
+    type Bot: Send + Sync;
+
+    // todo add user command name field? (const prevents downcast)
+    // const NAME: &'static str;
+
+    // todo update name()?
+    fn name(&self) -> &'static str;
+
+    // todo add default_permissions()?
+
+    async fn run(&self,
+                 state: Arc<BotState<Self::Bot>>,
+                 interaction: InteractionUse<AppCommandData, Unused>,
+                 target: User,
+                 guild_member: Option<PartialGuildMember>
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError>;
+}
+
+impl_downcast!(UserCommand assoc Bot);
+impl<'clone, B> Clone for Box<dyn UserCommand<Bot=B> + 'clone> {
+    fn clone(&self) -> Self {
+        dyn_clone::clone_box(&**self)
+    }
+}
+
+#[async_trait]
+pub trait MessageCommand: Send + Sync + DynClone + Downcast {
+    type Bot: Send + Sync;
+
+    // todo add message command name field? (const prevents downcast)
+    // const NAME: &'static str;
+
+    // todo update name()?
+    fn name(&self) -> &'static str;
+
+    // todo add default_permissions()?
+
+    async fn run(&self,
+                 state: Arc<BotState<Self::Bot>>,
+                 interaction: InteractionUse<AppCommandData, Unused>,
+                 target: Message
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError>;
+}
+
+impl_downcast!(MessageCommand assoc Bot);
+impl<'clone, B> Clone for Box<dyn MessageCommand<Bot=B> + 'clone> {
+    fn clone(&self) -> Self {
+        dyn_clone::clone_box(&**self)
+    }
+}
 
 /// Not url buttons
 #[async_trait]

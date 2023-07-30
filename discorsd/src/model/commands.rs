@@ -53,15 +53,16 @@ impl NotUnused for Used {}
 
 pub trait InteractionPayload {}
 
+// todo rename AppCommandData, ApplicationCommandData, ApplicationCommand
 #[derive(Debug, Clone, PartialEq)]
-pub struct SlashCommandData {
+pub struct AppCommandData {
     /// the id of the command being invoked
     pub command: CommandId,
     /// the name of the command being invoked
     pub command_name: String,
 }
 
-impl InteractionPayload for SlashCommandData {}
+impl InteractionPayload for AppCommandData {}
 
 pub trait ComponentData {}
 
