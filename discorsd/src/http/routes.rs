@@ -4,7 +4,7 @@ use crate::cache::Cache;
 use crate::model::channel::Channel;
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
-use crate::model::new_interaction::Token;
+use crate::model::interaction::Token;
 
 #[derive(Debug, Clone)]
 pub enum Route {

@@ -14,7 +14,7 @@ use crate::model::channel::{CategoryChannel, Channel, ChannelType, DmChannel, An
 use crate::model::guild::{Guild, GuildMember, UnavailableGuild};
 use crate::model::ids::*;
 use crate::model::message::{Message, Reaction};
-use crate::model::new_interaction::{ApplicationCommandData, InteractionData};
+use crate::model::interaction::{ApplicationCommandData, InteractionData};
 use crate::model::permissions::Role;
 use crate::model::user::User;
 use crate::shard::dispatch::PartialApplication;

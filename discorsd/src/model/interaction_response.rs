@@ -10,7 +10,7 @@ use crate::commands::{ButtonCommand, MenuCommand, MenuData};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, Menu};
 use crate::model::message::{AllowedMentions, MessageFlags};
-use crate::model::new_command::Choice;
+use crate::model::command::Choice;
 use crate::serde_utils::BoolExt;
 
 serde_num_tag! { just Serialize =>
@@ -165,6 +165,12 @@ impl InteractionMessage {
 
     pub fn content<S: Into<Cow<'static, str>>>(&mut self, content: S) {
         self.content = content.into();
+    }
+
+    /// Attach an image to this message. See [`MessageAttachment`] for details about what types impl
+    /// `Into<MessageAttachment>`.
+    pub fn attach<A: Into<MessageAttachment>>(&mut self, attachment: A) {
+        self.files.insert(attachment.into());
     }
 
     pub fn ephemeral(&mut self) {

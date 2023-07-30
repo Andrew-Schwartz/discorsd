@@ -14,7 +14,7 @@ use crate::model::guild::GuildMember;
 use crate::model::ids::*;
 use crate::model::locales::Locale;
 use crate::model::message::{Attachment, Message};
-use crate::model::new_command::{CommandOptionType, CommandType};
+use crate::model::command::{CommandOptionType, CommandType};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::serde_utils::null_as_t;
@@ -29,13 +29,6 @@ serde_num_tag! { just Deserialize =>
         (4) = ApplicationCommandAutocomplete(InteractionData<ApplicationCommandData>),
         (5) = ModalSubmit(InteractionData<ModalSubmitData>)
     }
-}
-
-#[test]
-fn test_interaction() {
-    const JSON: &str = r#"{"version":1,"type":2,"token":"aW50ZXJhY3Rpb246MTEzMTgwODk1NTA5ODc0NjkxMTpFakVDYjlLRzNuZjBFZEFCWlhweFRRaWpsc1NNR0JQMlZHd0x6M3RlTnlBenR5SFZlZm9zcmpRNURDcUpzVHJMOVI3Q2JBQlkxbnlrREtSb2lHdVBCM0l5Q1cyZ0FmWG5XSHdUSGgyalFHRkJnb0VHdnZpNnp1S054TGpTTXBESQ","member":{"user":{"username":"__steadfast","public_flags":128,"id":"243418816510558208","global_name":"Steadfast","discriminator":"0","avatar_decoration":null,"avatar":"3e22b9816f98ed571379cbabc85ef96f"},"unusual_dm_activity_until":null,"roles":["592892380609511445"],"premium_since":null,"permissions":"140737488355327","pending":false,"nick":"SFE","mute":false,"joined_at":"2018-09-20T00:00:44.216000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"avatar":null},"locale":"en-US","id":"1131808955098746911","guild_locale":"en-US","guild_id":"492122906864779274","guild":{"locale":"en-US","id":"492122906864779274","features":[]},"entitlements":[],"entitlement_sku_ids":[],"data":{"type":1,"name":"info","id":"832445237812133928"},"channel_id":"780240796690808912","channel":{"type":0,"topic":null,"rate_limit_per_user":0,"position":2,"permissions":"140737488355327","parent_id":"492122906864779275","nsfw":false,"name":"dev_bot","last_pin_timestamp":"2023-07-21T04:44:35+00:00","last_message_id":"1131808923276542012","id":"780240796690808912","guild_id":"492122906864779274","flags":0},"application_id":"780237314734686208","app_permissions":"140737488355327"}"#;
-    let interaction: Interaction = serde_json::from_str(JSON).unwrap();
-    println!("interaction = {:#?}", interaction);
 }
 
 serde_num_tag! { just Deserialize =>
@@ -56,7 +49,7 @@ serde_num_tag! { just Deserialize =>
         (CommandType::MessageCommand) = MessageCommand {
             id: CommandId,
             name: String,
-            target_id: UserId,
+            target_id: MessageId,
             resolved: ResolvedData,
         },
     }
@@ -512,7 +505,7 @@ pub struct ModalSubmitData {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::new_interaction::Interaction;
+    use crate::model::interaction::Interaction;
 
     #[test]
     fn slash_command() {

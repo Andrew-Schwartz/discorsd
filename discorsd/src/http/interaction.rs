@@ -16,9 +16,9 @@ use crate::model::components::{ActionRow, Button, Component, Menu};
 use crate::model::ids::*;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{AllowedMentions, Message, MessageFlags};
-use crate::model::new_command;
-use crate::model::new_command::{ApplicationCommand, Command};
-use crate::model::new_interaction::Token;
+use crate::model::command;
+use crate::model::command::{ApplicationCommand, Command};
+use crate::model::interaction::Token;
 
 impl DiscordClient {
     /// Fetch all of the global commands for your application.
@@ -67,7 +67,7 @@ impl DiscordClient {
         // todo maybe don't support this it kinda breaks stuff
         new_name: Option<&'a str>,
         new_description: Option<&'a str>,
-        new_options: Option<Vec<new_command::CommandOption>>,
+        new_options: Option<Vec<command::CommandOption>>,
         new_default_permission: Option<bool>,
     ) -> ClientResult<ApplicationCommand> {
         self.patch(
@@ -169,7 +169,7 @@ impl DiscordClient {
         id: CommandId,
         new_name: Option<&'a str>,
         new_description: Option<&'a str>,
-        new_options: Option<Vec<new_command::CommandOption>>,
+        new_options: Option<Vec<command::CommandOption>>,
         new_default_permission: Option<bool>,
     ) -> ClientResult<ApplicationCommand> {
         self.patch(
@@ -412,7 +412,7 @@ struct Edit<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    options: Option<Vec<new_command::CommandOption>>,
+    options: Option<Vec<command::CommandOption>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     default_permission: Option<bool>,
 }
@@ -549,7 +549,7 @@ impl WebhookMessage {
 
     /// Attach an image to this message. See [`MessageAttachment`] for details about what types impl
     /// `Into<MessageAttachment>`.
-    pub fn attachment<A: Into<MessageAttachment>>(&mut self, attachment: A) {
+    pub fn attach<A: Into<MessageAttachment>>(&mut self, attachment: A) {
         self.files.insert(attachment.into());
     }
 

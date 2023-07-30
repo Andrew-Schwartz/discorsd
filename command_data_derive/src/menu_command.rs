@@ -31,6 +31,11 @@ pub fn menu_impl(ty: &Ident, data: DataEnum, attrs: Vec<Attribute>) -> TokenStre
         }
     });
 
+    let all = variants.iter().map(|v| {
+        let ident = &v.ident;
+        quote! { Self::#ident }
+    });
+
     let options = variants.iter().map(|v| {
         let value = &v.ident_str;
         let label = v.display();
@@ -97,6 +102,9 @@ pub fn menu_impl(ty: &Ident, data: DataEnum, attrs: Vec<Attribute>) -> TokenStre
                 match self {
                     #(#into_branches),*
                 }
+            }
+            fn all() -> ::std::vec::Vec<Self> {
+                vec![#(#all),*]
             }
             fn options() -> ::std::vec::Vec<::discorsd::model::components::SelectOption> {
                 vec![

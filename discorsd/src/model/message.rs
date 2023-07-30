@@ -10,7 +10,7 @@ use crate::model::components::ActionRow;
 use crate::model::emoji::Emoji;
 use crate::model::ids::*;
 pub use crate::model::ids::MessageId;
-use crate::model::new_interaction::InteractionType;
+use crate::model::interaction::InteractionType;
 use crate::model::Png;
 use crate::model::user::User;
 use crate::serde_utils::BoolExt;
@@ -873,7 +873,7 @@ pub trait TimestampMarkup {
 impl TimestampMarkup for DateTime<Utc> {
     fn timestamp_styled(self, style: TimestampStyle) -> String {
         let timestamp = self.timestamp();
-        format!("<t:{timestamp}:{style}")
+        format!("<t:{timestamp}:{style}>")
     }
 }
 

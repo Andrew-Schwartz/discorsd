@@ -120,7 +120,7 @@ impl Enum {
                 TokenStream2::new()
             };
             quote_spanned! { v.ident.span() =>
-                ::std::iter::once(<Self::VecArg as ::discorsd::commands::NewVecArgLadder>::make(
+                ::std::iter::once(<Self::VecArg as ::discorsd::commands::VecArgLadder>::make(
                     #name, #desc, #options
                 ))#take
             }
@@ -250,7 +250,7 @@ impl Enum {
                 quote! { Vec::new() }
             };
             let quote = quote_spanned! { v.ident.span() =>
-                <Self::VecArg as ::discorsd::commands::NewVecArgLadder>::make(#name, #desc, #make_args)
+                <Self::VecArg as ::discorsd::commands::VecArgLadder>::make(#name, #desc, #make_args)
             };
             quote
         });
@@ -283,11 +283,11 @@ impl Enum {
                 <
                     <
                         #first_variant_ty as ::discorsd::model::commands::CommandData<#c_ty>
-                    >::Options as ::discorsd::model::commands::NewOptionsLadder
+                    >::Options as ::discorsd::model::commands::OptionsLadder
                 >::Raise;
 
                 fn from_options(
-                    Self::Options { name, name_localizations, data: ::discorsd::model::new_interaction::HasOptions { options }, focused }: Self::Options,
+                    Self::Options { name, name_localizations, data: ::discorsd::model::interaction::HasOptions { options }, focused }: Self::Options,
                 ) -> ::std::result::Result<Self, ::discorsd::errors::CommandParseError> {
                     match name.as_str() {
                         #(#match_branches,)*
@@ -302,7 +302,7 @@ impl Enum {
                 <
                     <
                         #first_variant_ty as ::discorsd::model::commands::CommandData<#c_ty>
-                    >::VecArg as ::discorsd::model::commands::NewVecArgLadder
+                    >::VecArg as ::discorsd::model::commands::VecArgLadder
                 >::Raise;
 
                 fn make_args(command: &#c_ty) -> ::std::vec::Vec<Self::VecArg> {
@@ -344,10 +344,10 @@ impl Enum {
         quote! {
             #command_data_impl_statement for #ty {
                 // All inline struct enums are SubCommands
-                type Options = ::discorsd::model::new_interaction::DataOption<::discorsd::model::new_interaction::SubCommand>;
+                type Options = ::discorsd::model::interaction::DataOption<::discorsd::model::interaction::SubCommand>;
 
                 fn from_options(
-                    Self::Options { name, name_localizations, data: ::discorsd::model::new_interaction::HasOptions { options }, focused }: Self::Options
+                    Self::Options { name, name_localizations, data: ::discorsd::model::interaction::HasOptions { options }, focused }: Self::Options
                 ) -> ::std::result::Result<Self, ::discorsd::errors::CommandParseError> {
                     use ::discorsd::errors::*;
                     match name.as_str() {
@@ -360,7 +360,7 @@ impl Enum {
                 }
 
                 // All inline struct enums are SubCommands
-                type VecArg = ::discorsd::model::new_command::SubCommandOption;
+                type VecArg = ::discorsd::model::command::SubCommandOption;
 
                 fn make_args(command: &#c_ty) -> ::std::vec::Vec<Self::VecArg> {
                     #make_args_vec

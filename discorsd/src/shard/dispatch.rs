@@ -15,7 +15,7 @@ use crate::model::emoji::{CustomEmoji, Emoji};
 use crate::model::guild::{ExplicitFilterLevel, Guild, GuildFeature, GuildMember, Integration, MfaLevel, NotificationLevel, PremiumTier, SystemChannelFlags, UnavailableGuild, VerificationLevel};
 use crate::model::ids::*;
 use crate::model::message::{Attachment, ChannelMention, ChannelMessageId, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageInteraction, MessageReference, MessageType, Reaction, StickerItem};
-use crate::model::new_interaction::{ApplicationCommandData, Interaction, InteractionData};
+use crate::model::interaction::{ApplicationCommandData, Interaction, InteractionData};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::model::voice::VoiceState;

@@ -33,21 +33,21 @@ pub fn enum_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
             const ARG_NAME: &'static str = stringify!(#ty);
 
             fn option_ctor(
-                string_data: ::discorsd::model::new_command::OptionData<Self::Data>
-            ) -> ::discorsd::model::new_command::CommandDataOption {
-                ::discorsd::model::new_command::CommandDataOption::String(string_data)
+                string_data: ::discorsd::model::command::OptionData<Self::Data>
+            ) -> ::discorsd::model::command::CommandDataOption {
+                ::discorsd::model::command::CommandDataOption::String(string_data)
             }
         }
 
         impl<C: ::discorsd::commands::SlashCommandRaw> ::discorsd::model::commands::CommandData<C> for #ty {
             // all choice enums are built from a ValueOption
-            type Options = ::discorsd::model::new_interaction::InteractionDataOption;
+            type Options = ::discorsd::model::interaction::InteractionDataOption;
 
             fn from_options(
                 option: Self::Options,
             ) -> ::std::result::Result<Self, ::discorsd::errors::CommandParseError> {
                 use ::discorsd::errors::*;
-                use ::discorsd::model::new_interaction::*;
+                use ::discorsd::model::interaction::*;
                 match option {
                     InteractionDataOption::String(
                         DataOption {
@@ -60,7 +60,7 @@ pub fn enum_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
                             name: value, options: &#variants_array
                         }))
                     }
-                    value => ::std::result::Result::Err(CommandParseError::NewBadType(NewOptionTypeError {
+                    value => ::std::result::Result::Err(CommandParseError::BadType(OptionTypeError {
                         value,
                         desired: CommandOptionTypeParsed::String,
                     })),
@@ -75,7 +75,7 @@ pub fn enum_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
                 // }
             }
 
-            type VecArg = ::discorsd::model::new_command::CommandDataOption;
+            type VecArg = ::discorsd::model::command::CommandDataOption;
 
             fn make_args(_: &C) -> Vec<Self::VecArg> { Vec::new() }
 
@@ -85,7 +85,7 @@ pub fn enum_impl(ty: &Ident, data: DataEnum) -> TokenStream2 {
             }
             // all choice enums give String as the choice
             type ChoicePrimitive = String;
-            fn into_command_choice(self) -> ::discorsd::model::new_command::Choice<Self::ChoicePrimitive> {
+            fn into_command_choice(self) -> ::discorsd::model::command::Choice<Self::ChoicePrimitive> {
                 match self {
                     #to_command_choice_branches
                 }
@@ -135,7 +135,7 @@ impl Enum {
     //     let choices = self.0.iter().map(|v| {
     //         let name = v.choice.as_ref().map_or_else(|| v.ident.to_string(), LitStr::value);
     //         let value = v.name();
-    //         quote! { ::discorsd::model::new_command::Choice::new(#name, #value.into())  }
+    //         quote! { ::discorsd::model::command::Choice::new(#name, #value.into())  }
     //     });
     //     quote! { #(#choices),* }
     // }
@@ -153,7 +153,7 @@ impl Enum {
             let ident = &v.ident;
             let name = v.choice.as_ref().map_or_else(|| v.ident.to_string(), LitStr::value);
             let value = v.name();
-            quote! { Self::#ident => ::discorsd::model::new_command::Choice::new(#name, #value.to_string()) }
+            quote! { Self::#ident => ::discorsd::model::command::Choice::new(#name, #value.to_string()) }
         });
         quote! { #(#branches),* }
     }
@@ -163,7 +163,7 @@ impl Enum {
     //         let ident = &v.ident;
     //         let name = v.choice.as_ref().map_or_else(|| v.ident.to_string(), LitStr::value);
     //         let value = v.name();
-    //         quote! { Self::#ident => ::discorsd::model::new_command::Choice::new(#name.to_string(), #value.to_string()) }
+    //         quote! { Self::#ident => ::discorsd::model::command::Choice::new(#name.to_string(), #value.to_string()) }
     //     });
     //     quote! { #(#branches),* }
     // }

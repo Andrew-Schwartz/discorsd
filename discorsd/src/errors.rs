@@ -9,7 +9,7 @@ use crate::BotState;
 use crate::commands::SlashCommandRaw;
 use crate::http::{ClientError, DisplayClientError};
 use crate::model::ids::*;
-use crate::model::new_interaction::{DmUser, GuildUser, InteractionDataOption, InteractionUser};
+use crate::model::interaction::{DmUser, GuildUser, InteractionDataOption, InteractionUser};
 
 #[derive(Error, Debug)]
 pub enum BotError {
@@ -167,7 +167,7 @@ impl Display for CommandParseErrorInfo {
 
 #[derive(Debug)]
 pub enum CommandParseError {
-    NewBadType(NewOptionTypeError),
+    BadType(OptionTypeError),
     UnknownOption(UnknownOption),
     EmptyOption(String),
     BadOrder(String, usize, Range<usize>),
@@ -187,7 +187,7 @@ pub enum CommandParseError {
 }
 
 #[derive(Debug)]
-pub struct NewOptionTypeError {
+pub struct OptionTypeError {
     pub value: InteractionDataOption,
     pub desired: CommandOptionTypeParsed,
 }
@@ -209,9 +209,9 @@ pub enum CommandOptionTypeParsed {
     // todo Attachment?
 }
 
-impl From<NewOptionTypeError> for CommandParseError {
-    fn from(ot: NewOptionTypeError) -> Self {
-        Self::NewBadType(ot)
+impl From<OptionTypeError> for CommandParseError {
+    fn from(ot: OptionTypeError) -> Self {
+        Self::BadType(ot)
     }
 }
 

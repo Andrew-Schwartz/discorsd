@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::model::channel::ChannelType;
@@ -281,7 +282,7 @@ impl<T: SelectMenuType> Menu<T> {
 impl Menu<String> {
     /// the choices in the select, max 25
     pub fn options(&mut self, options: Vec<SelectOption>) {
-        self.options = options;
+        self.options = options.into_iter().unique().collect();
     }
 
     pub fn default_options<F: Fn(&str) -> bool>(&mut self, is_default: F) {
@@ -298,7 +299,7 @@ impl Menu<ChannelId> {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SelectOption {
     /// the user-facing name of the option, max 100 characters
     pub label: String,

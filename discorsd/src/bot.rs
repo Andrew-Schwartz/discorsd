@@ -30,8 +30,8 @@ use crate::model::components::{Button, ComponentId, Menu, SelectMenuType};
 use crate::model::guild::{Guild, Integration};
 use crate::model::ids::*;
 use crate::model::message::Message;
-use crate::model::new_interaction;
-use crate::model::new_interaction::{ApplicationCommandData, MessageComponentData};
+use crate::model::interaction;
+use crate::model::interaction::{ApplicationCommandData, MessageComponentData};
 use crate::model::permissions::Role;
 use crate::model::user::User;
 use crate::shard;
@@ -129,24 +129,6 @@ impl<B: Send + Sync> AsRef<Self> for BotState<B> {
 }
 
 impl<B: Send + Sync> BotState<B> {
-    // todo
-    // #[cfg(test)]
-    pub fn testing_state(bot: B) -> Arc<Self> {
-        Arc::new(Self {
-            client: DiscordClient::single(String::new()),
-            cache: Default::default(),
-            bot,
-            commands: Default::default(),
-            command_names: Default::default(),
-            global_commands: Default::default(),
-            global_command_names: Default::default(),
-            reaction_commands: Default::default(),
-            buttons: Default::default(),
-            menus: Default::default(),
-            count: Default::default(),
-        })
-    }
-
     /// Gets the current [`User`](User).
     ///
     /// # Panics
@@ -347,7 +329,7 @@ pub trait Bot: Send + Sync + Sized {
 
     async fn message_update(&self, message: Message, state: Arc<BotState<Self>>, updates: MessageUpdate) -> Result<(), BotError> { Ok(()) }
 
-    async fn interaction(&self, interaction: new_interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
+    async fn interaction(&self, interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
         Self::handle_interaction(interaction, state).await
     }
 
@@ -374,11 +356,11 @@ pub trait BotExt: Bot + 'static {
 
     /// Respond to an interaction with the matching [SlashCommand]. Should likely be used in the
     /// [Bot::interaction](Bot::interaction) method.
-    async fn handle_interaction(interaction: new_interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
+    async fn handle_interaction(interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
         match interaction {
-            new_interaction::Interaction::Ping => println!("PING!"),
-            new_interaction::Interaction::ApplicationCommand(data) => {
-                let new_interaction::InteractionData {
+            interaction::Interaction::Ping => println!("PING!"),
+            interaction::Interaction::ApplicationCommand(data) => {
+                let interaction::InteractionData {
                     id: interaction_id,
                     application_id,
                     token,
@@ -414,12 +396,12 @@ pub trait BotExt: Bot + 'static {
                             }
                         }
                     }
-                    ApplicationCommandData::UserCommand { .. } => todo!(),
+                    ApplicationCommandData::UserCommand { id, name, target_id, resolved } => todo!(),
                     ApplicationCommandData::MessageCommand { .. } => todo!(),
                 }
             }
-            new_interaction::Interaction::MessageComponent(data) => {
-                let new_interaction::InteractionData {
+            interaction::Interaction::MessageComponent(data) => {
+                let interaction::InteractionData {
                     id: interaction_id,
                     application_id,
                     token,
@@ -466,8 +448,8 @@ pub trait BotExt: Bot + 'static {
                     MessageComponentData::TextInput => todo!(),
                 }
             }
-            new_interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),
-            new_interaction::Interaction::ModalSubmit(_) => todo!(),
+            interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),
+            interaction::Interaction::ModalSubmit(_) => todo!(),
         }
         Ok(())
     }

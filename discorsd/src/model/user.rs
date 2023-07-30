@@ -11,7 +11,7 @@ use crate::model::locales::Locale;
 /// separated by a distinction of "bot" vs "normal." Although they are similar, bot users are
 /// automated users that are "owned" by another user. Unlike normal users, bot users do not have a
 /// limitation on the number of Guilds they can be a part of.
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, Hash)]
 pub struct User {
     /// the user's id
     ///

@@ -20,13 +20,12 @@ pub mod emoji;
 pub mod user;
 pub mod channel;
 pub mod message;
-pub mod old_interaction;
 pub mod commands;
 pub mod components;
 pub mod locales;
 pub mod auto_moderation;
-pub mod new_command;
-pub mod new_interaction;
+pub mod command;
+pub mod interaction;
 pub mod interaction_response;
 
 /// Information returned from the `/gateway/bot` endpoint, as in

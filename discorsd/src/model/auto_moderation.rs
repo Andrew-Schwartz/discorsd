@@ -211,7 +211,7 @@ serde_num_tag! {
         /// logs user content to a specified channel
         (2) = SendAlertMessage {
            /// channel to which user content should be logged
-            channel: ChannelId,
+            channel_id: ChannelId,
         },
         /// timeout user for a specified duration
         ///

@@ -16,15 +16,14 @@ use crate::commands::SlashCommandRaw;
 use crate::errors::*;
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::interaction::WebhookMessage;
-use crate::model::{ids::*, new_command, new_interaction};
-use crate::model::components::{ComponentId, SelectMenuType};
+use crate::model::{command, ids::*, interaction};
+use crate::model::command::{Choice, CommandDataOption, CommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
+use crate::model::components::{ComponentId, SelectMenuType, SelectOption};
 use crate::model::guild::GuildMember;
+use crate::model::interaction::{ButtonPressData, DataOption, DmUser, GuildUser, HasValue, InteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw, SubCommand, SubCommandGroup, Token};
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{Attachment, Message};
-use crate::model::new_command::{Choice, CommandOption as NewCommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
-use crate::model::new_interaction::{ButtonPressData, DmUser, GuildUser, InteractionDataOption as NewInteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw};
 use crate::model::user::User;
-use crate::model::new_interaction::Token;
 
 pub trait Usability: PartialEq {}
 
@@ -369,24 +368,24 @@ macro_rules! option_primitives {
         $(
             #[allow(clippy::use_self)]
             impl<C: SlashCommandRaw> CommandData<C> for $ty {
-                type Options = new_interaction::InteractionDataOption;
+                type Options = InteractionDataOption;
 
                 fn from_options(option: Self::Options) -> Result<Self, CommandParseError> {
                     match option {
-                        new_interaction::InteractionDataOption::$variant(
-                            new_interaction::DataOption {
-                                data: new_interaction::HasValue { value },
+                        InteractionDataOption::$variant(
+                            DataOption {
+                                data: HasValue { value },
                                 ..
                             }
                         ) => Ok(value),
-                        bad => Err(CommandParseError::NewBadType(NewOptionTypeError {
+                        bad => Err(CommandParseError::BadType(OptionTypeError {
                             value: bad,
                             desired: CommandOptionTypeParsed::String,
                         }))
                     }
                 }
 
-                type VecArg = new_command::CommandDataOption;
+                type VecArg = CommandDataOption;
 
                 fn make_args(_: &C) -> Vec<Self::VecArg> {
                     unreachable!()
@@ -401,8 +400,8 @@ macro_rules! option_primitives {
                 type Data = Self;
                 const ARG_NAME: &'static str = stringify!($variant);
 
-                fn option_ctor(data: OptionData<Self::Data>) -> new_command::CommandDataOption {
-                    new_command::CommandDataOption::$variant(data)
+                fn option_ctor(data: OptionData<Self::Data>) -> CommandDataOption {
+                    CommandDataOption::$variant(data)
                 }
             }
         )+
@@ -425,26 +424,26 @@ macro_rules! option_integers {
         $(
             #[allow(clippy::use_self)]
             impl<C: SlashCommandRaw> CommandData<C> for $ty {
-                type Options = new_interaction::InteractionDataOption;
+                type Options = InteractionDataOption;
 
                 fn from_options(option: Self::Options) -> Result<Self, CommandParseError> {
                     use std::convert::TryInto;
                     match option {
-                        new_interaction::InteractionDataOption::Integer(
-                            new_interaction::DataOption {
-                                data: new_interaction::HasValue { value },
+                        InteractionDataOption::Integer(
+                            DataOption {
+                                data: HasValue { value },
                                 ..
                             }
                         ) => value.try_into()
                             .map_err(|_| todo!()),
-                        bad => Err(CommandParseError::NewBadType(NewOptionTypeError {
+                        bad => Err(CommandParseError::BadType(OptionTypeError {
                             value: bad,
                             desired: CommandOptionTypeParsed::I64,
                         }))
                     }
                 }
 
-                type VecArg = new_command::CommandDataOption;
+                type VecArg = CommandDataOption;
 
                 fn make_args(_: &C) -> Vec<Self::VecArg> {
                     unreachable!()
@@ -459,8 +458,8 @@ macro_rules! option_integers {
                 // todo specify positive integer?
                 const ARG_NAME: &'static str = "int";
 
-                fn option_ctor(data: OptionData<Self::Data>) -> new_command::CommandDataOption {
-                    new_command::CommandDataOption::Integer(data)
+                fn option_ctor(data: OptionData<Self::Data>) -> CommandDataOption {
+                    CommandDataOption::Integer(data)
                 }
             }
         )+
@@ -475,7 +474,7 @@ macro_rules! option_ids {
     ($($id:ty, $cotp:ident, $name:literal);+ $(;)?) => {
         $(
             impl<C: SlashCommandRaw> CommandData<C> for $id {
-                type Options = new_interaction::InteractionDataOption;
+                type Options = InteractionDataOption;
 
                 fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
                     todo!()
@@ -487,7 +486,7 @@ macro_rules! option_ids {
                     //     .map_err(|e| e.into())
                 }
 
-                type VecArg = new_command::CommandDataOption;
+                type VecArg = CommandDataOption;
 
                 fn make_args(_: &C) -> Vec<Self::VecArg> {
                     unreachable!()
@@ -501,8 +500,8 @@ macro_rules! option_ids {
                 type Data = String;
                 const ARG_NAME: &'static str = $name;
 
-                fn option_ctor(cdo: OptionData<Self::Data>) -> new_command::CommandDataOption {
-                    new_command::CommandDataOption::String(cdo)
+                fn option_ctor(cdo: OptionData<Self::Data>) -> CommandDataOption {
+                    CommandDataOption::String(cdo)
                 }
             }
         )+
@@ -519,7 +518,7 @@ pub trait OptionCtor {
     /// Get the name of this for generic types that implement [`CommandData`]
     const ARG_NAME: &'static str;
 
-    fn option_ctor(data: OptionData<Self::Data>) -> new_command::CommandDataOption;
+    fn option_ctor(data: OptionData<Self::Data>) -> CommandDataOption;
 }
 
 impl<T: OptionCtor<Data=T> + OptionType> OptionCtor for Option<T> {
@@ -527,7 +526,7 @@ impl<T: OptionCtor<Data=T> + OptionType> OptionCtor for Option<T> {
 
     const ARG_NAME: &'static str = T::ARG_NAME;
 
-    fn option_ctor(data: OptionData<Self::Data>) -> new_command::CommandDataOption {
+    fn option_ctor(data: OptionData<Self::Data>) -> CommandDataOption {
         T::option_ctor(data)
     }
 }
@@ -537,29 +536,20 @@ pub enum Highest {}
 
 pub enum Lowest {}
 
-// pub trait VecArgLadder: Sized {
-//     type Raise: VecArgLadder;
-//     type Lower: VecArgLadder;
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption;
-//     fn make<N, D>(name: N, desc: D, lower_options: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>>;
-// }
-
-pub trait NewVecArgLadder: Sized {
-    type Raise: NewVecArgLadder;
-    type Lower: NewVecArgLadder;
-    fn wrap(vec: Vec<Self>) -> Vec<NewCommandOption>;
+pub trait VecArgLadder: Sized {
+    type Raise: VecArgLadder;
+    type Lower: VecArgLadder;
+    fn wrap(vec: Vec<Self>) -> Vec<CommandOption>;
     fn make<N, D>(name: N, desc: D, lower_options: Vec<Self::Lower>) -> Self
         where N: Into<Cow<'static, str>>,
               D: Into<Cow<'static, str>>;
 }
 
-impl NewVecArgLadder for Infallible {
+impl VecArgLadder for Infallible {
     type Raise = Self;
     type Lower = Self;
 
-    fn wrap(_: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(_: Vec<Self>) -> Vec<CommandOption> {
         unreachable!()
     }
 
@@ -568,28 +558,12 @@ impl NewVecArgLadder for Infallible {
     }
 }
 
-// impl VecArgLadder for Highest {
-//     type Raise = Self;
-//     // todo should maybe just be self?
-//     type Lower = SubCommandGroup;
-//
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption {
-//         unreachable!("should never have a `Highest`")
-//     }
-//
-//     fn make<N, D>(_: N, _: D, _: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>> {
-//         unreachable!("should never have a `Highest`")
-//     }
-// }
-
-impl NewVecArgLadder for Highest {
+impl VecArgLadder for Highest {
     type Raise = Self;
     // todo should maybe just be self?
     type Lower = SubCommandGroupOption;
 
-    fn wrap(_: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(_: Vec<Self>) -> Vec<CommandOption> {
         unreachable!("should never have a `Highest`")
     }
 
@@ -600,26 +574,11 @@ impl NewVecArgLadder for Highest {
     }
 }
 
-// impl VecArgLadder for SubCommandGroup {
-//     type Raise = Highest;
-//     type Lower = SubCommand;
-//
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption {
-//         TopLevelOption::Groups
-//     }
-//
-//     fn make<N, D>(name: N, desc: D, lower_options: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>> {
-//         Self { name: name.into(), description: desc.into(), sub_commands: lower_options }
-//     }
-// }
-
-impl NewVecArgLadder for SubCommandGroupOption {
+impl VecArgLadder for SubCommandGroupOption {
     type Raise = Highest;
     type Lower = SubCommandOption;
 
-    fn wrap(vec: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(vec: Vec<Self>) -> Vec<CommandOption> {
         vec.into_iter()
             .map(Self::into)
             .collect()
@@ -633,33 +592,18 @@ impl NewVecArgLadder for SubCommandGroupOption {
             name_localizations: Default::default(),
             description: desc.into(),
             description_localizations: Default::default(),
-            extra_data: new_command::SubCommandGroup {
+            extra_data: command::SubCommandGroup {
                 sub_commands: lower_options,
             },
         })
     }
 }
 
-// impl VecArgLadder for SubCommand {
-//     type Raise = SubCommandGroup;
-//     type Lower = DataOption;
-//
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption {
-//         TopLevelOption::Commands
-//     }
-//
-//     fn make<N, D>(name: N, desc: D, lower_options: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>> {
-//         Self { name: name.into(), description: desc.into(), options: lower_options }
-//     }
-// }
-
-impl NewVecArgLadder for SubCommandOption {
+impl VecArgLadder for SubCommandOption {
     type Raise = SubCommandGroupOption;
-    type Lower = new_command::CommandDataOption;
+    type Lower = CommandDataOption;
 
-    fn wrap(vec: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(vec: Vec<Self>) -> Vec<CommandOption> {
         vec.into_iter()
             .map(Self::into)
             .collect()
@@ -673,34 +617,18 @@ impl NewVecArgLadder for SubCommandOption {
             name_localizations: Default::default(),
             description: desc.into(),
             description_localizations: Default::default(),
-            extra_data: new_command::SubCommand {
+            extra_data: command::SubCommand {
                 data_options: lower_options,
             },
         })
     }
 }
 
-// impl VecArgLadder for DataOption {
-//     type Raise = SubCommand;
-//     type Lower = Lowest;
-//
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption {
-//         TopLevelOption::Data
-//     }
-//
-//     fn make<N, D>(_: N, _: D, _: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>> {
-//         // Self::String(CommandDataOption::new(name, desc))
-//         unimplemented!("this should be covered by the proc-macro for structs?")
-//     }
-// }
-
-impl NewVecArgLadder for new_command::CommandDataOption {
+impl VecArgLadder for CommandDataOption {
     type Raise = SubCommandOption;
     type Lower = Lowest;
 
-    fn wrap(vec: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(vec: Vec<Self>) -> Vec<CommandOption> {
         vec.into_iter()
             .map(Self::into)
             .collect()
@@ -714,28 +642,12 @@ impl NewVecArgLadder for new_command::CommandDataOption {
     }
 }
 
-// impl VecArgLadder for Lowest {
-//     // todo should maybe be Self?
-//     type Raise = DataOption;
-//     type Lower = Self;
-//
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption {
-//         unreachable!("should never have a `Lowest`")
-//     }
-//
-//     fn make<N, D>(_: N, _: D, _: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>> {
-//         unreachable!("should never have a `Lowest`")
-//     }
-// }
-
-impl NewVecArgLadder for Lowest {
+impl VecArgLadder for Lowest {
     // todo should maybe be Self?
-    type Raise = new_command::CommandDataOption;
+    type Raise = CommandDataOption;
     type Lower = Self;
 
-    fn wrap(_: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(_: Vec<Self>) -> Vec<CommandOption> {
         unreachable!("should never have a `Lowest`")
     }
 
@@ -746,29 +658,11 @@ impl NewVecArgLadder for Lowest {
     }
 }
 
-// impl VecArgLadder for () {
-//     type Raise = ();
-//     type Lower = ();
-//
-//     fn tlo_ctor() -> fn(Vec<Self>) -> TopLevelOption {
-//         fn ctor(_: Vec<()>) -> TopLevelOption {
-//             TopLevelOption::Empty
-//         }
-//         ctor
-//     }
-//
-//     fn make<N, D>(_: N, _: D, _: Vec<Self::Lower>) -> Self
-//         where N: Into<Cow<'static, str>>,
-//               D: Into<Cow<'static, str>> {
-//         unimplemented!()
-//     }
-// }
-
-impl NewVecArgLadder for () {
+impl VecArgLadder for () {
     type Raise = ();
     type Lower = ();
 
-    fn wrap(vec: Vec<Self>) -> Vec<NewCommandOption> {
+    fn wrap(vec: Vec<Self>) -> Vec<CommandOption> {
         // todo ig
         assert!(vec.is_empty());
         Vec::new()
@@ -781,21 +675,14 @@ impl NewVecArgLadder for () {
     }
 }
 
-// pub trait OptionsLadder: Sized {
-//     type Raise: OptionsLadder;
-//     type Lower: OptionsLadder;
-//
-//     fn from_data_option(data: InteractionDataOption) -> Result<Self, CommandParseError>;
-// }
-
-pub trait NewOptionsLadder: Sized {
-    type Raise: NewOptionsLadder;
-    type Lower: NewOptionsLadder;
+pub trait OptionsLadder: Sized {
+    type Raise: OptionsLadder;
+    type Lower: OptionsLadder;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError>;
 }
 
-impl NewOptionsLadder for Infallible {
+impl OptionsLadder for Infallible {
     type Raise = Self;
     type Lower = Self;
 
@@ -804,17 +691,7 @@ impl NewOptionsLadder for Infallible {
     }
 }
 
-// impl OptionsLadder for Highest {
-//     // todo should maybe just be self?
-//     type Raise = Self;
-//     type Lower = InteractionDataOption;
-//
-//     fn from_data_option(_: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         unreachable!("should never have a `Highest`")
-//     }
-// }
-
-impl NewOptionsLadder for Highest {
+impl OptionsLadder for Highest {
     // todo should maybe just be self?
     type Raise = Self;
     type Lower = InteractionOption;
@@ -824,40 +701,18 @@ impl NewOptionsLadder for Highest {
     }
 }
 
-// impl OptionsLadder for InteractionDataOption {
-//     type Raise = Highest;
-//     type Lower = GroupOption;
-//
-//     fn from_data_option(data: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         Ok(data)
-//     }
-// }
-
-impl NewOptionsLadder for InteractionOption {
+impl OptionsLadder for InteractionOption {
     type Raise = Highest;
-    type Lower = new_interaction::DataOption<new_interaction::SubCommandGroup>;
+    type Lower = DataOption<SubCommandGroup>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
         Ok(data)
     }
 }
 
-// impl OptionsLadder for GroupOption {
-//     type Raise = InteractionDataOption;
-//     type Lower = CommandOption;
-//
-//     fn from_data_option(data: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         match data {
-//             InteractionDataOption::Group(group) => Ok(group),
-//             InteractionDataOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),
-//             InteractionDataOption::Values(_) => Err(CommandParseError::BadGroupOccurrence),
-//         }
-//     }
-// }
-
-impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubCommandGroup> {
+impl OptionsLadder for DataOption<SubCommandGroup> {
     type Raise = InteractionOption;
-    type Lower = new_interaction::DataOption<new_interaction::SubCommand>;
+    type Lower = DataOption<SubCommand>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
         match data {
@@ -870,22 +725,9 @@ impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubComman
     }
 }
 
-// impl OptionsLadder for CommandOption {
-//     type Raise = GroupOption;
-//     type Lower = Vec<ValueOption>;
-//
-//     fn from_data_option(data: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         match data {
-//             InteractionDataOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
-//             InteractionDataOption::Command(command) => Ok(command),
-//             InteractionDataOption::Values(_) => Err(CommandParseError::BadGroupOccurrence),
-//         }
-//     }
-// }
-
-impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubCommand> {
-    type Raise = new_interaction::DataOption<new_interaction::SubCommandGroup>;
-    type Lower = Vec<new_interaction::InteractionDataOption>;
+impl OptionsLadder for DataOption<SubCommand> {
+    type Raise = DataOption<SubCommandGroup>;
+    type Lower = Vec<InteractionDataOption>;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
         match data {
@@ -898,22 +740,9 @@ impl NewOptionsLadder for new_interaction::DataOption<new_interaction::SubComman
     }
 }
 
-// impl OptionsLadder for Vec<ValueOption> {
-//     type Raise = CommandOption;
-//     type Lower = ValueOption;
-//
-//     fn from_data_option(data: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         match data {
-//             InteractionDataOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
-//             InteractionDataOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),
-//             InteractionDataOption::Values(values) => Ok(values),
-//         }
-//     }
-// }
-
-impl NewOptionsLadder for Vec<new_interaction::InteractionDataOption> {
-    type Raise = new_interaction::DataOption<new_interaction::SubCommand>;
-    type Lower = new_interaction::InteractionDataOption;
+impl OptionsLadder for Vec<InteractionDataOption> {
+    type Raise = DataOption<SubCommand>;
+    type Lower = InteractionDataOption;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
         match data {
@@ -925,26 +754,8 @@ impl NewOptionsLadder for Vec<new_interaction::InteractionDataOption> {
     }
 }
 
-// #[allow(clippy::use_self)]
-// impl OptionsLadder for ValueOption {
-//     type Raise = Vec<ValueOption>;
-//     type Lower = Lowest;
-//
-//     fn from_data_option(data: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         match data {
-//             InteractionDataOption::Group(_) => Err(CommandParseError::BadGroupOccurrence),
-//             InteractionDataOption::Command(_) => Err(CommandParseError::BadCommandOccurrence),
-//             InteractionDataOption::Values(mut values) => {
-//                 warn!("This probably shouldn't be happening???");
-//                 warn!("values = {:?}", values);
-//                 Ok(values.remove(0))
-//             }
-//         }
-//     }
-// }
-
-impl NewOptionsLadder for new_interaction::InteractionDataOption {
-    type Raise = Vec<new_interaction::InteractionDataOption>;
+impl OptionsLadder for InteractionDataOption {
+    type Raise = Vec<InteractionDataOption>;
     type Lower = Lowest;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
@@ -962,19 +773,9 @@ impl NewOptionsLadder for new_interaction::InteractionDataOption {
     }
 }
 
-// impl OptionsLadder for Lowest {
-//     // todo should just be self?
-//     type Raise = ValueOption;
-//     type Lower = Self;
-//
-//     fn from_data_option(_: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         unreachable!("should never have a `Lowest`")
-//     }
-// }
-
-impl NewOptionsLadder for Lowest {
+impl OptionsLadder for Lowest {
     // todo should just be self?
-    type Raise = NewInteractionDataOption;
+    type Raise = InteractionDataOption;
     type Lower = Self;
 
     fn from_data_option(_: InteractionOption) -> Result<Self, CommandParseError> {
@@ -982,16 +783,7 @@ impl NewOptionsLadder for Lowest {
     }
 }
 
-// impl OptionsLadder for () {
-//     type Raise = ();
-//     type Lower = ();
-//
-//     fn from_data_option(_: InteractionDataOption) -> Result<Self, CommandParseError> {
-//         Ok(())
-//     }
-// }
-
-impl NewOptionsLadder for () {
+impl OptionsLadder for () {
     type Raise = ();
     type Lower = ();
 
@@ -1019,11 +811,11 @@ impl VarargState {
 
 /// the big boi himself
 pub trait CommandData<Command: SlashCommandRaw>: Sized {
-    type Options: NewOptionsLadder + Send;
+    type Options: OptionsLadder + Send;
     /// function to go from (the options in a) `InteractionData` -> Self
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError>;
 
-    type VecArg: NewVecArgLadder;
+    type VecArg: VecArgLadder;
     // todo: VecArg *maybe* should have the Vec<> on it, so that this can just return one?
     //  do I ever actually return vec![one] or just do I always panic?
     /// functionality to got from Self -> Command for sending to Discord
@@ -1062,7 +854,7 @@ impl<C: SlashCommandRaw> CommandData<C> for Infallible {
 
 // let `()` be used for commands with no options
 impl<Command: SlashCommandRaw> CommandData<Command> for () {
-    type Options = Vec<new_interaction::InteractionDataOption>;
+    type Options = Vec<interaction::InteractionDataOption>;
 
     fn from_options(_: Self::Options) -> Result<Self, CommandParseError> {
         Ok(())
@@ -1100,17 +892,17 @@ impl<C: SlashCommandRaw, T: CommandData<C>> CommandData<C> for Option<T> {
 
 impl<T, C, S> CommandData<C> for HashSet<T, S>
     where
-        T: CommandData<C, VecArg=new_command::CommandDataOption, Options=new_interaction::InteractionDataOption> + Eq + Hash,
+        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption> + Eq + Hash,
         C: SlashCommandRaw,
         S: BuildHasher + Default,
 {
-    type Options = Vec<new_interaction::InteractionDataOption>;
+    type Options = Vec<interaction::InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         options.into_iter().map(T::from_options).collect()
     }
 
-    type VecArg = new_command::CommandDataOption;
+    type VecArg = command::CommandDataOption;
 
     fn make_args(c: &C) -> Vec<Self::VecArg> {
         T::make_args(c)
@@ -1130,16 +922,16 @@ impl<T, C, S> CommandData<C> for HashSet<T, S>
 
 impl<T, C> CommandData<C> for BTreeSet<T>
     where
-        T: CommandData<C, VecArg=new_command::CommandDataOption, Options=new_interaction::InteractionDataOption> + Ord,
+        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption> + Ord,
         C: SlashCommandRaw,
 {
-    type Options = Vec<new_interaction::InteractionDataOption>;
+    type Options = Vec<interaction::InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         options.into_iter().map(T::from_options).collect()
     }
 
-    type VecArg = new_command::CommandDataOption;
+    type VecArg = command::CommandDataOption;
 
     fn make_args(c: &C) -> Vec<Self::VecArg> {
         T::make_args(c)
@@ -1160,16 +952,16 @@ impl<T, C> CommandData<C> for BTreeSet<T>
 #[allow(clippy::use_self)]
 impl<T, C> CommandData<C> for Vec<T>
     where
-        T: CommandData<C, VecArg=new_command::CommandDataOption, Options=new_interaction::InteractionDataOption>,
+        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption>,
         C: SlashCommandRaw,
 {
-    type Options = Vec<new_interaction::InteractionDataOption>;
+    type Options = Vec<interaction::InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         options.into_iter().map(T::from_options).collect()
     }
 
-    type VecArg = new_command::CommandDataOption;
+    type VecArg = command::CommandDataOption;
 
     fn make_args(c: &C) -> Vec<Self::VecArg> {
         T::make_args(c)
@@ -1189,10 +981,10 @@ impl<T, C> CommandData<C> for Vec<T>
 
 impl<T, C, const N: usize> CommandData<C> for [T; N]
     where
-        T: CommandData<C, VecArg=new_command::CommandDataOption, Options=new_interaction::InteractionDataOption>,
+        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption>,
         C: SlashCommandRaw,
 {
-    type Options = Vec<new_interaction::InteractionDataOption>;
+    type Options = Vec<interaction::InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         let iter = options.into_iter().map(T::from_options);
@@ -1201,7 +993,7 @@ impl<T, C, const N: usize> CommandData<C> for [T; N]
         ))
     }
 
-    type VecArg = new_command::CommandDataOption;
+    type VecArg = command::CommandDataOption;
 
     fn make_args(command: &C) -> Vec<Self::VecArg> {
         T::make_args(command)
@@ -1223,17 +1015,38 @@ pub trait MenuData: Sized + FromStr {
     type Data: SelectMenuType;
 
     fn into_option(self) -> <Self::Data as SelectMenuType>::SelectOption;
+    fn all() -> Vec<Self>;
     fn options() -> Vec<<Self::Data as SelectMenuType>::SelectOption>;
 }
 macro_rules! id_menu {
     ($($id:ty),+ $(,)?) => {
         $(
             impl MenuData for $id {
-                type Data = $id;
+                type Data = Self;
                 fn into_option(self) -> () { unreachable!() }
+                fn all() -> Vec<Self> { Vec::new() }
                 fn options() -> Vec<()> { Vec::new() }
             }
         )+
     };
 }
 id_menu!(UserId, RoleId, MentionableId, ChannelId);
+impl MenuData for String {
+    type Data = Self;
+
+    fn into_option(self) -> SelectOption {
+        SelectOption {
+            label: self.clone(),
+            value: self,
+            description: None,
+            emoji: None,
+            default: false,
+        }
+    }
+    fn all() -> Vec<Self> {
+        Vec::new()
+    }
+    fn options() -> Vec<SelectOption> {
+        Vec::new()
+    }
+}

@@ -17,9 +17,9 @@ use crate::http::ClientResult;
 pub use crate::model::commands::*;
 use crate::model::ids::{CommandId, GuildId};
 use crate::model::interaction_response::ephemeral;
-use crate::model::new_command;
-use crate::model::new_command::{ApplicationCommand, Command};
-use crate::model::new_interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw};
+use crate::model::command;
+use crate::model::command::{ApplicationCommand, Command};
+use crate::model::interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw};
 use crate::shard::dispatch::ReactionUpdate;
 
 /// The trait to implement to define a Slash Command.
@@ -91,7 +91,6 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     /// [`Deferred`](Deferred) if the [`run`](Self::run) method only
     /// [`defer`](InteractionUse::<Data, Unused>::defer)s the interaction, to automatically delete the
     /// interaction after the [`run`](Self::run) method finishes.
-    // todo this probably is not worth it
     type Use: NotUnused + Send;
 
     /// The name that this command is invoked in Discord with.
@@ -111,7 +110,7 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     /// of [`CommandData::make_args`](CommandData::make_args), but can be overridden. Note: if you
     /// override this method, you *MUST* ensure that the command structure is compatible with/can be
     /// deserialized into [`Data`](Self::Data).
-    fn options(&self) -> Vec<new_command::CommandOption> {
+    fn options(&self) -> Vec<command::CommandOption> {
         <Self::Data as CommandData<Self>>::VecArg::wrap(Self::Data::make_args(self))
     }
 

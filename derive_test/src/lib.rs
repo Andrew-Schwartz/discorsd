@@ -3,7 +3,7 @@
 mod tests {
     use command_data_derive::*;
     use discorsd::model::ids::{ChannelId, GuildId, UserId};
-    use discorsd::model::new_interaction::{DataOption, SubCommand, SubCommandGroup};
+    use discorsd::model::interaction::{DataOption, SubCommand, SubCommandGroup};
 
     struct TestBot;
 

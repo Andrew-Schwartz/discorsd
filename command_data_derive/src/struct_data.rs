@@ -28,7 +28,7 @@ pub fn struct_impl(ty: &Ident, generics: Vec<TypeParam>, fields: Fields, attribu
     let tokens = quote! {
         #command_data_impl for #generic_ty {
             // all structs are built from a Vec<ValueOption>
-            type Options = ::std::vec::Vec<::discorsd::model::new_interaction::InteractionDataOption>;
+            type Options = ::std::vec::Vec<::discorsd::model::interaction::InteractionDataOption>;
 
             fn from_options(
                 options: Self::Options,
@@ -37,7 +37,7 @@ pub fn struct_impl(ty: &Ident, generics: Vec<TypeParam>, fields: Fields, attribu
             }
 
             // all structs are DataOptions
-            type VecArg = ::discorsd::model::new_command::CommandDataOption;
+            type VecArg = ::discorsd::model::command::CommandDataOption;
 
             fn make_args(command: &#command_type) -> ::std::vec::Vec<Self::VecArg> {
                 #data_options
@@ -681,7 +681,7 @@ impl Field {
             {
                 #let_name_desc
                 #[allow(unused_mut)]
-                let mut option = ::discorsd::model::new_command::OptionData::<
+                let mut option = ::discorsd::model::command::OptionData::<
                     <#ty as ::discorsd::commands::OptionCtor>::Data
                 >::new(name, desc);
                 #required
