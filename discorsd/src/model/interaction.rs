@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
 use std::iter;
-use std::vec::Drain;
+use std::vec::IntoIter;
 
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
@@ -59,10 +59,10 @@ impl Id for ApplicationCommandData {
     type Id = CommandId;
 
     fn id(&self) -> Self::Id {
-        match self {
-            &ApplicationCommandData::SlashCommand { id, .. } => id,
-            &ApplicationCommandData::UserCommand { id, .. } => id,
-            &ApplicationCommandData::MessageCommand { id, .. } => id,
+        match *self {
+            Self::SlashCommand { id, .. } => id,
+            Self::UserCommand { id, .. } => id,
+            Self::MessageCommand { id, .. } => id,
         }
     }
 }
@@ -76,9 +76,9 @@ impl PartialEq for ApplicationCommandData {
 impl ApplicationCommandData {
     pub fn name(&self) -> &str {
         match self {
-            ApplicationCommandData::SlashCommand { name, .. } => &name,
-            ApplicationCommandData::UserCommand { name, .. } => &name,
-            ApplicationCommandData::MessageCommand { name, .. } => &name,
+            Self::SlashCommand { name, .. } => name,
+            Self::UserCommand { name, .. } => name,
+            Self::MessageCommand { name, .. } => name,
         }
     }
 }
@@ -151,7 +151,7 @@ pub struct GuildUser {
 }
 
 /// Information about the user that invoked this interaction
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DmUser {
     /// The user that invoked this interaction
     pub user: User,
@@ -170,7 +170,7 @@ pub enum InteractionUser {
 // for Error usage
 impl Display for InteractionUser {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -222,10 +222,11 @@ impl Default for InteractionOption {
 }
 
 impl TryFrom<Vec<InteractionOptionRaw>> for InteractionOption {
+    // todo
     type Error = &'static str;
 
-    fn try_from(mut value: Vec<InteractionOptionRaw>) -> Result<Self, Self::Error> {
-        fn values(first: InteractionDataOption, rest: Drain<InteractionOptionRaw>) -> Result<InteractionOption, &'static str> {
+    fn try_from(value: Vec<InteractionOptionRaw>) -> Result<Self, Self::Error> {
+        fn values(first: InteractionDataOption, rest: IntoIter<InteractionOptionRaw>) -> Result<InteractionOption, &'static str> {
             let vec = iter::once(Ok(first))
                 .chain(rest.map(|value| match value {
                     InteractionOptionRaw::SubCommand(_) => Err("bad sc"),
@@ -243,7 +244,7 @@ impl TryFrom<Vec<InteractionOptionRaw>> for InteractionOption {
                 .try_collect()?;
             Ok(InteractionOption::Values(vec))
         }
-        let mut rest = value.drain(..);
+        let mut rest = value.into_iter();
         match rest.next().ok_or("no opts")? {
             InteractionOptionRaw::SubCommand(c) => Ok(Self::Command(c)),
             InteractionOptionRaw::SubCommandGroup(g) => Ok(Self::Group(g)),
@@ -426,7 +427,7 @@ pub struct ResolvedData {
     pub attachments: IdMap<Attachment>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct PartialGuildMember {
     /// this users guild nickname
     pub nick: Option<String>,

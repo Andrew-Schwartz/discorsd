@@ -15,6 +15,7 @@ use futures::{SinkExt, TryStreamExt};
 use log::{error, info, warn};
 use rand::Rng;
 use thiserror::Error;
+use tokio::sync::RwLockWriteGuard;
 use tokio::time::{Duration, Instant};
 
 use dispatch::DispatchPayload;
@@ -32,9 +33,10 @@ use crate::shard::model::Heartbeat;
 pub mod model;
 pub mod dispatch;
 pub mod intents;
+pub mod send;
 
-pub type ShardResult<T> = std::result::Result<T, ShardError>;
-type WsStream = WebSocketStream<ConnectStream>;
+pub type ShardResult<T> = Result<T, ShardError>;
+pub type WsStream = WebSocketStream<ConnectStream>;
 type WsError = async_tungstenite::tungstenite::Error;
 
 // todo prune
@@ -47,6 +49,8 @@ pub enum ShardError {
     Websocket(#[from] WsError),
     #[error("stream closed (restarting)")]
     NeedRestart,
+    #[error("stream closed (resuming)")]
+    NeedResume,
     #[error("other error: {0}")]
     Other(String),
 }
@@ -54,7 +58,7 @@ pub enum ShardError {
 // internal types used by `Shard<B>`
 /// [Shard::send](Shard::send) can either fail because of a websocket error or because
 /// [Shard::stream](Shard::stream) is `None` (ie, need to restart the websocket)
-enum SendError {
+pub(crate) enum SendError {
     Websocket(WsError),
     NeedRestart,
 }
@@ -77,11 +81,32 @@ impl From<WsError> for SendError {
 /// used by `Shard::events_loop` which can only ever return with an error
 pub enum Never {}
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum ConnectionAction {
+    None,
+    Resume,
+    Reconnect,
+}
+
+impl ConnectionAction {
+    fn terminal(self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Resume | Self::Reconnect => true,
+        }
+    }
+}
+
+fn gateway_params(url: &str) -> String {
+    format!("{url}/?v={API_VERSION}&encoding=json")
+}
+
 pub struct Shard<B: Bot + 'static> {
-    stream: Option<WsStream>,
     pub shard_info: (u64, u64),
     state: Arc<BotState<B>>,
     session_id: Option<String>,
+    gateway: Option<String>,
+    resume_gateway: Option<String>,
     seq: Option<u64>,
     heartbeat_interval: Option<Duration>,
     heartbeat: Option<Instant>,
@@ -93,10 +118,11 @@ impl<B: Bot + 'static> Shard<B> {
     pub fn new(state: Arc<BotState<B>>) -> Self {
         // let stream = Shard::connect(&state).await?;
         Self {
-            stream: None,
             shard_info: (0, 0),
             state,
             session_id: None,
+            gateway: None,
+            resume_gateway: None,
             seq: None,
             heartbeat_interval: None,
             heartbeat: None,
@@ -108,13 +134,13 @@ impl<B: Bot + 'static> Shard<B> {
     async fn close<D: Into<Option<Duration>> + Send>(&mut self, close_frame: CloseFrame<'_>, delay: D) {
         // do this first so we don't hold it across the `.await`
         info!("closing: {:?}", close_frame);
-        if let Some(mut stream) = self.stream.take() {
+        if let Some(mut stream) = self.state.stream.write().await.take() {
             if let Err(e) = stream.close(Some(close_frame)).await {
-                error!("{}", e)
+                error!("{}", e);
             }
             info!("stream closed");
         } else {
-            info!("stream was already closed")
+            info!("stream was already closed");
         }
         if let Some(delay) = delay.into() {
             info!("delaying for {:?}", delay);
@@ -126,57 +152,87 @@ impl<B: Bot + 'static> Shard<B> {
         loop {
             let error = self._run().await;
             if let Err(e) = error {
-                error!("Shard::_run error {}, restarting...", e)
+                error!("Shard::_run error {}, restarting...", e);
             }
         }
     }
 
-    async fn _run(&mut self) -> ShardResult<Never> {
-        // need to connect
-        if self.stream.is_none() {
-            let result = self.state.client.gateway().await;
-            let ws = format!("{}/?v={}&encoding=json", result?.url, API_VERSION);
-            info!("connecting to {}", &ws);
+    async fn _run(&mut self) -> ShardResult<()> {
+        // need to (re)connect
+        println!("self.stream.is_none() = {:?}", self.state.stream.read().await.is_none());
+        if self.state.stream.read().await.is_none() {
+            if self.gateway.is_none() {
+                let url = self.state.client.gateway_bot()
+                    .await?
+                    .url;
+                let ws = gateway_params(&url);
+                self.gateway = Some(ws);
+            }
+            let ws = self.gateway.as_deref().unwrap();
+            info!("connecting to {}", ws);
             let (stream, _): (WsStream, _) = connect_async(ws).await?;
-            self.stream = Some(stream);
+            *self.state.stream.write().await = Some(stream);
         }
 
+        println!("(&self.session_id, &self.seq) = {:?}", (&self.session_id, &self.seq));
         if let (Some(session), &Some(seq)) = (&self.session_id, &self.seq) {
             let resume = Resume {
                 token: self.state.client.token.clone(),
                 session_id: session.clone(),
                 seq,
             };
-            self.send(resume).await?;
+            println!("resume (in _run) = {resume:?}");
+            send(&mut self.state.stream.write().await, resume).await?;
         }
 
-        let error = self.events_loop().await;
-        match &error {
+        let action = self.events_loop().await;
+        match &action {
             Err(ShardError::Request(_)) => {}
             Err(ShardError::Websocket(_)) => {
                 // as far as I can tell, all websocket errors are fatal
-                self.stream = None;
+                *self.state.stream.write().await = None;
             }
             Err(ShardError::NeedRestart) => {
-                self.stream = None;
+                *self.state.stream.write().await = None;
             }
+            Err(ShardError::NeedResume) => { todo!() }
             Err(ShardError::Other(_)) => {}
-            Ok(_) => unreachable!(),
+            Ok(ConnectionAction::None) => unreachable!(),
+            Ok(ConnectionAction::Resume) => {
+                println!("RESUMING!");
+                println!("(&self.session_id, &self.seq) = {:?}", (&self.session_id, &self.seq));
+                self.close(CloseFrame {
+                    code: CloseCode::Restart,
+                    reason: "Initiating resume".into(),
+                }, None).await;
+                let Some(resume_gateway) = &self.resume_gateway else {
+                    todo!("handle this?")
+                };
+                println!("resuming ({resume_gateway:?})");
+                println!("(&self.session_id, &self.seq) = {:?}", (&self.session_id, &self.seq));
+                let (stream, _): (WsStream, _) = connect_async(resume_gateway).await?;
+                *self.state.stream.write().await = Some(stream);
+            }
+            Ok(ConnectionAction::Reconnect) => {
+                *self.state.stream.write().await = None;
+            }
         }
-        error
+        Ok(())
     }
 
-    async fn events_loop(&mut self) -> ShardResult<Never> {
+    async fn events_loop(&mut self) -> ShardResult<ConnectionAction> {
         loop {
-            if self.stream.is_none() {
+            if self.state.stream.read().await.is_none() {
                 warn!("start of 'events loop with a None stream");
                 return Err(ShardError::NeedRestart);
             };
 
-            self.heartbeat().await?;
+            let action = self.heartbeat().await?;
+            if action.terminal() { return Ok(action); }
+
             let result = tokio::time::timeout(
                 Duration::from_millis(200),
-                self.stream.as_mut().ok_or(ShardError::NeedRestart)?.try_next(),
+                self.state.stream.write().await.as_mut().ok_or(ShardError::NeedRestart)?.try_next(),
             ).await;
             if let Ok(next) = result {
                 match next {
@@ -187,24 +243,21 @@ impl<B: Bot + 'static> Shard<B> {
                             Ok(payload) => payload,
                             Err(payload_parse_error) => {
                                 error!("payload_parse_error = {}", payload_parse_error);
-                                println!("{}", text);
+                                println!("{text}");
                                 continue;
                             }
                         };
-                        let need_restart = self.handle_payload(payload).await?;
-                        if need_restart {
-                            return Err(ShardError::NeedRestart);
-                            // break 'events;
-                        }
+                        let action = self.handle_payload(payload).await?;
+                        if action.terminal() { return Ok(action); }
                     }
                     Ok(Some(Message::Close(close_frame))) => {
                         error!("close frame = {:?}", close_frame);
                         self.reset_connection_state();
+                        // todo handle resuming/reconnecting https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes
                         self.close(close_frame.unwrap_or_else(|| CloseFrame {
                             code: CloseCode::Restart,
                             reason: "Received `Message::Close` (without a CloseFrame)".into(),
                         }), None).await;
-                        // break 'events;
                         return Err(ShardError::NeedRestart);
                     }
                     Ok(Some(msg)) => warn!("msg = {:?}", msg),
@@ -215,7 +268,6 @@ impl<B: Bot + 'static> Shard<B> {
                             code: CloseCode::Restart,
                             reason: "Websocket closed".into(),
                         }, None).await;
-                        // break 'events;
                         return Err(ShardError::NeedRestart);
                     }
                     Err(ws_error) => {
@@ -225,9 +277,8 @@ impl<B: Bot + 'static> Shard<B> {
                         self.reset_connection_state();
                         self.close(CloseFrame {
                             code: CloseCode::Error,
-                            reason: "websocket error".into(),
+                            reason: "Websocket error".into(),
                         }, None).await;
-                        // break 'events;
                         return Err(ShardError::NeedRestart);
                     }
                 }
@@ -235,66 +286,75 @@ impl<B: Bot + 'static> Shard<B> {
         }
     }
 
-    async fn heartbeat(&mut self) -> Result<(), SendError> {
+    async fn heartbeat(&mut self) -> Result<ConnectionAction, SendError> {
         if let (Some(heartbeat), Some(ack)) = (self.heartbeat, self.ack) {
-            // if we haven't received a `HeartbeatAck` since the last time we sent a heartbeat,
-            // give the connection a strike
-            if heartbeat.checked_duration_since(ack).is_some() {
-                self.strikes += 1;
+            // If a client does not receive a heartbeat ACK between its attempts at sending
+            // heartbeats, this may be due to a failed or "zombied" connection. The client should
+            // immediately terminate the connection with any close code besides `1000` (Normal) or
+            // `1001` (Away), then reconnect and attempt to Resume.
+            if heartbeat > ack {
+                // if heartbeat.checked_duration_since(ack).is_some() {
+                //     self.strikes += 1;
+                // todo reset ack to None I think
                 println!("self.strikes = {:?}", self.strikes);
-                if self.strikes >= 3 {
-                    self.reset_connection_state();
-                    self.close(CloseFrame {
-                        code: CloseCode::Restart,
-                        reason: "ACK not recent enough, closing websocket".into(),
-                    }, None).await;
-                }
+                // if self.strikes >= 3 {
+                // self.reset_connection_state();
+                self.heartbeat = None;
+                self.ack = None;
+                self.close(CloseFrame {
+                    code: CloseCode::Restart,
+                    reason: "ACK not recent enough, closing websocket".into(),
+                }, None).await;
+                // }
+                return Ok(ConnectionAction::Resume);
             } else {
-                self.strikes = 0;
+                // self.strikes = 0;
             }
         }
 
         match (self.heartbeat, self.heartbeat_interval, self.seq) {
             (Some(last_sent), Some(interval), _) if last_sent.elapsed() < interval => {}
             (_, _, Some(seq_num)) => {
-                self.send(Heartbeat { seq_num }).await?;
+                send(&mut self.state.stream.write().await, Heartbeat { seq_num }).await?;
                 self.heartbeat = Some(Instant::now());
             }
             _ => {}
         }
 
-        Ok(())
+        Ok(ConnectionAction::None)
     }
 
     // todo that should probably just be communicated through ShardError::NeedsRestart
     /// handles `payload`, returns `true` if we need to reconnect
-    async fn handle_payload(&mut self, payload: Payload) -> ShardResult<bool> {
+    async fn handle_payload(&mut self, payload: Payload) -> ShardResult<ConnectionAction> {
         let need_reconnect = match payload {
             Payload::Hello(HelloPayload { heartbeat_interval }) => {
                 if self.session_id.is_none() {
                     self.initialize_connection(heartbeat_interval).await?;
                 }
-                false
+                ConnectionAction::None
             }
             Payload::Dispatch { event, seq_num } => {
                 if let Some(curr) = self.seq {
                     if seq_num > curr + 1 {
                         warn!("received seq num {}, expected {} ({} were missed)",
                               seq_num, curr + 1, seq_num - curr - 1
-                        )
+                        );
                     }
                 }
                 self.seq = Some(seq_num);
                 self.handle_dispatch(event).await;
-                false
+                ConnectionAction::None
             }
             Payload::HeartbeatAck => {
                 self.ack = Some(Instant::now());
-                false
+                ConnectionAction::None
             }
-            Payload::Heartbeat(heartbeat) => {
-                info!("recv: Heartbeat {}", heartbeat.seq_num);
-                false
+            Payload::Heartbeat(Heartbeat { seq_num }) => {
+                info!("recv: Heartbeat {}", seq_num);
+                send(&mut self.state.stream.write().await, Heartbeat { seq_num }).await?;
+                self.heartbeat = Some(Instant::now());
+                ConnectionAction::None
             }
             Payload::Reconnect => {
                 info!("recv: Reconnect");
@@ -302,12 +362,13 @@ impl<B: Bot + 'static> Shard<B> {
                     code: CloseCode::Restart,
                     reason: "Reconnect requested by Discord".into(),
                 }, None).await;
-                true
+                ConnectionAction::Resume
             }
             Payload::InvalidSession(resumable) => {
                 info!("recv: Invalid Session");
                 if resumable {
                     warn!("Resumable Invalid Session: anything special to do here?");
+                    ConnectionAction::Resume
                 } else {
                     self.reset_connection_state();
 
@@ -316,12 +377,12 @@ impl<B: Bot + 'static> Shard<B> {
                         code: CloseCode::Restart,
                         reason: "(non-resumable) Invalid Session".into(),
                     }, Duration::from_secs(delay)).await;
+                    ConnectionAction::Reconnect
                 }
-                true
             }
             _ => {
                 error!("Should not receive {:?}", payload);
-                false
+                ConnectionAction::None
             }
         };
         Ok(need_reconnect)
@@ -332,7 +393,7 @@ impl<B: Bot + 'static> Shard<B> {
         self.heartbeat_interval = Some(delay);
 
         if self.session_id.is_none() {
-            self.send(self.state.bot.identify()).await?;
+            send(&mut self.state.stream.write().await, self.state.bot.identify()).await?;
         }
 
         Ok(())
@@ -351,6 +412,8 @@ impl<B: Bot + 'static> Shard<B> {
             assert_eq!(tot, self.shard_info.1);
 
             self.session_id = Some(ready.session_id.clone());
+            let resume = gateway_params(&ready.resume_gateway_url);
+            self.resume_gateway = Some(resume);
 
             // todo add user and message commands
             if self.state.global_commands.get().is_none() {
@@ -448,18 +511,6 @@ impl<B: Bot + 'static> Shard<B> {
         // Ok(())
     }
 
-    async fn send<P>(&mut self, payload: P) -> Result<(), SendError>
-        where P: Into<Payload> + Display + Send
-    {
-        info!("sending {}", payload);
-        let message = serde_json::to_string(&payload.into())
-            .expect("Payload deserialization can't fail");
-        self.stream.as_mut()
-            .ok_or(SendError::NeedRestart)?
-            .send(Message::Text(message)).await?;
-        Ok(())
-    }
-
     fn reset_connection_state(&mut self) {
         let Self {
             // stream,
@@ -481,4 +532,17 @@ impl<B: Bot + 'static> Shard<B> {
         *strikes = 0;
         // *online = false;
     }
+}
+
+pub(crate) async fn send<P>(stream: &mut RwLockWriteGuard<'_, Option<WsStream>>, payload: P) -> Result<(), SendError>
+    where P: Into<Payload> + Display + Send
+{
+    info!("sending {}", payload);
+    let message = serde_json::to_string(&payload.into())
+        .expect("Payload serialization can't fail");
+    stream
+        .as_mut()
+        .ok_or(SendError::NeedRestart)?
+        .send(Message::Text(message)).await?;
+    Ok(())
 }

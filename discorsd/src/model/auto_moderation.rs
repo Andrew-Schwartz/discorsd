@@ -1,19 +1,21 @@
+use serde::{Deserialize, Serialize};
+
 use crate::model::ids::{ChannelId, GuildId, RoleId, RuleId, UserId};
 
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct AutoModRule {
     /// the id of this rule
     pub id: RuleId,
     /// the id of the guild which this rule belongs to
-    pub guild: GuildId,
+    pub guild_id: GuildId,
     /// the rule name
     pub name: String,
     /// the user which first created this rule
-    pub creator: UserId,
+    pub creator_id: UserId,
     /// the rule event type
     pub event_type: EventType,
     /// the rule trigger type & data
-    pub trigger: Trigger,
+    pub trigger_metadata: Trigger,
     /// the actions which will execute when the rule is triggered
     pub actions: Vec<Action>,
     /// whether the rule is enabled
@@ -32,164 +34,176 @@ serde_repr! {
     }
 }
 
-serde_repr! {
-    pub enum TriggerType: u8 {
+serde_num_tag! {
+    #[derive(Clone, Debug)]
+    pub enum Trigger = "trigger_type": u8 as TriggerType {
         /// check if content contains words from a user defined list of keywords
-        Keyword = 1,
+        ///
+        /// Max 6 per guild
+        (1) = Keyword {
+            /// substrings which will be searched for in content (Maximum of 1000).
+            ///
+            /// A keyword can be a phrase which contains multiple words. Wildcard symbols can be
+            /// used to customize how each keyword will be matched. Each keyword must be 60
+            /// characters or less.
+            #serde = default
+            keyword_filter: Vec<String>,
+            /// regular expression patterns which will be matched against content (Maximum of 10).
+            #serde = default
+            regex_patterns: Vec<String>,
+            /// substrings which will be exempt from triggering the preset trigger type (Maximum of
+            /// 100).
+            ///
+            /// Each allow_list keyword can be a phrase which contains multiple words. Wildcard
+            /// symbols can be used to customize how each keyword will be matched.
+            #serde = default
+            allow_list: Vec<String>,
+        },
         /// check if content represents generic spam
-        Spam = 3,
+        ///
+        /// Max 1 per guild
+        (3) = Spam,
         /// check if content contains words from internal pre-defined wordsets
-        KeywordPreset = 4,
+        ///
+        /// Max 1 per guild
+        (4) = KeywordPreset {
+            /// the internally pre-defined wordsets which will be searched for in content
+            presets: Vec<KeywordPreset>,
+            /// substrings which will be exempt from triggering the preset trigger type (Maximum of
+            /// 1000).
+            ///
+            /// Each allow_list keyword can be a phrase which contains multiple words. Wildcard
+            /// symbols can be used to customize how each keyword will be matched.
+            allow_list: Vec<String>,
+        },
         /// check if content contains more unique mentions than allowed
-        MentionSpam = 5,
+        ///
+        /// Max 1 per guild
+        (5) = MentionSpam {
+            /// total number of unique role and user mentions allowed per message (Maximum of 50)
+            mention_total_limit: u32,
+            /// whether to automatically detect mention raids
+            mention_raid_protection_enabled: bool,
+        },
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Trigger {
-    /// check if content contains words from a user defined list of keywords
-    ///
-    /// Max 3 per guild
-    Keyword {
-        /// substrings which will be searched for in content
-        keyword_filter: Vec<String>,
-    },
-    /// check if content represents generic spam
-    ///
-    /// Max 1 per guild
-    Spam,
-    /// check if content contains words from internal pre-defined wordsets
-    ///
-    /// Max 1 per guild
-    KeywordPreset {
-        /// the internally pre-defined wordsets which will be searched for in content
-        presets: Vec<KeywordPreset>,
-        /// substrings which will be exempt from triggering the preset trigger type
-        allow_list: Vec<String>,
-    },
-    /// check if content contains more unique mentions than allowed
-    ///
-    /// Max 1 per guild
-    MentionSpam {
-        /// total number of unique role and user mentions allowed per message (Maximum of 50)
-        mention_total_limit: u32,
-    },
-}
-
-mod rule_serde {
-    use std::borrow::Cow;
-
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use serde::de::{Error, Unexpected};
-
-    use crate::model::ids::{ChannelId, GuildId, RoleId, RuleId, UserId};
-
-    use super::{Action, AutoModRule, EventType, KeywordPreset, Trigger};
-
-    #[derive(Deserialize, Serialize)]
-    pub(super) struct RawAutoModRule<'a> {
-        id: RuleId,
-        guild_id: GuildId,
-        name: &'a str,
-        creator_id: UserId,
-        event_type: EventType,
-        trigger_type: u8,
-        trigger_metadata: Metadata<'a>,
-        actions: Cow<'a, [Action]>,
-        enabled: bool,
-        exempt_roles: Cow<'a, [RoleId]>,
-        exempt_channels: Cow<'a, [ChannelId]>,
-    }
-
-    fn cow_empty<T>(c: &Cow<[T]>) -> bool where [T]: ToOwned {
-        c.is_empty()
-    }
-
-    #[derive(Deserialize, Serialize, Default)]
-    pub(super) struct Metadata<'a> {
-        #[serde(default, skip_serializing_if = "cow_empty")]
-        keyword_filter: Cow<'a, [String]>,
-        #[serde(default, skip_serializing_if = "cow_empty")]
-        presets: Cow<'a, [KeywordPreset]>,
-        #[serde(default, skip_serializing_if = "cow_empty")]
-        allow_list: Cow<'a, [String]>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        mention_total_limit: Option<u32>,
-    }
-
-    impl Serialize for AutoModRule {
-        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-            let default = Metadata::default();
-            let (trigger_type, trigger_metadata) = match &self.trigger {
-                Trigger::Keyword { keyword_filter } => (1, Metadata {
-                    keyword_filter: keyword_filter.into(),
-                    ..default
-                }),
-                Trigger::Spam => (3, default),
-                Trigger::KeywordPreset { presets, allow_list } => (4, Metadata {
-                    presets: presets.into(),
-                    allow_list: allow_list.into(),
-                    ..default
-                }),
-                &Trigger::MentionSpam { mention_total_limit } => (5, Metadata {
-                    mention_total_limit: Some(mention_total_limit),
-                    ..default
-                }),
-            };
-            RawAutoModRule {
-                id: self.id,
-                guild_id: self.guild,
-                name: &self.name,
-                creator_id: self.creator,
-                event_type: self.event_type,
-                trigger_type,
-                trigger_metadata,
-                actions: (&self.actions).into(),
-                enabled: self.enabled,
-                exempt_roles: (&self.exempt_roles).into(),
-                exempt_channels: (&self.exempt_channels).into(),
-            }.serialize(s)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for AutoModRule {
-        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-            let RawAutoModRule {
-                id,
-                guild_id,
-                name,
-                creator_id,
-                event_type,
-                trigger_type,
-                trigger_metadata: Metadata { keyword_filter, presets, allow_list, mention_total_limit },
-                actions,
-                enabled,
-                exempt_roles,
-                exempt_channels
-            } = RawAutoModRule::deserialize(d)?;
-            let trigger = match trigger_type {
-                1 => Trigger::Keyword { keyword_filter: keyword_filter.into() },
-                3 => Trigger::Spam,
-                4 => Trigger::KeywordPreset { presets: presets.into(), allow_list: allow_list.into() },
-                5 => mention_total_limit.map(|mention_total_limit| Trigger::MentionSpam { mention_total_limit })
-                    .ok_or_else(|| D::Error::missing_field("Trigger::MentionSpam::mention_total_limit"))?,
-                unknown => return Err(D::Error::invalid_value(Unexpected::Unsigned(unknown as _), &"1, 3, 4, 5")),
-            };
-            Ok(Self {
-                id,
-                guild: guild_id,
-                name: name.to_string(),
-                creator: creator_id,
-                event_type,
-                trigger,
-                actions: actions.to_vec(),
-                enabled,
-                exempt_roles: exempt_roles.to_vec(),
-                exempt_channels: exempt_channels.to_vec(),
-            })
-        }
-    }
-}
+// mod rule_serde {
+//     use std::borrow::Cow;
+//
+//     use serde::{Deserialize, Deserializer, Serialize, Serializer};
+//     use serde::de::{Error, Unexpected};
+//
+//     use crate::model::ids::{ChannelId, GuildId, RoleId, RuleId, UserId};
+//
+//     use super::{Action, AutoModRule, EventType, KeywordPreset, Trigger};
+//
+//     #[derive(Deserialize, Serialize)]
+//     pub(super) struct RawAutoModRule<'a> {
+//         id: RuleId,
+//         guild_id: GuildId,
+//         name: &'a str,
+//         creator_id: UserId,
+//         event_type: EventType,
+//         trigger_type: u8,
+//         trigger_metadata: Metadata<'a>,
+//         actions: Cow<'a, [Action]>,
+//         enabled: bool,
+//         exempt_roles: Cow<'a, [RoleId]>,
+//         exempt_channels: Cow<'a, [ChannelId]>,
+//     }
+//
+//     fn cow_empty<T>(c: &Cow<[T]>) -> bool where [T]: ToOwned {
+//         c.is_empty()
+//     }
+//
+//     #[derive(Deserialize, Serialize, Default)]
+//     pub(super) struct Metadata<'a> {
+//         #[serde(default, skip_serializing_if = "cow_empty")]
+//         keyword_filter: Cow<'a, [String]>,
+//         #[serde(default, skip_serializing_if = "cow_empty")]
+//         presets: Cow<'a, [KeywordPreset]>,
+//         #[serde(default, skip_serializing_if = "cow_empty")]
+//         allow_list: Cow<'a, [String]>,
+//         #[serde(skip_serializing_if = "Option::is_none")]
+//         mention_total_limit: Option<u32>,
+//     }
+//
+//     impl Serialize for AutoModRule {
+//         fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+//             let default = Metadata::default();
+//             let (trigger_type, trigger_metadata) = match &self.trigger {
+//                 Trigger::Keyword { keyword_filter } => (1, Metadata {
+//                     keyword_filter: keyword_filter.into(),
+//                     ..default
+//                 }),
+//                 Trigger::Spam => (3, default),
+//                 Trigger::KeywordPreset { presets, allow_list } => (4, Metadata {
+//                     presets: presets.into(),
+//                     allow_list: allow_list.into(),
+//                     ..default
+//                 }),
+//                 &Trigger::MentionSpam { mention_total_limit } => (5, Metadata {
+//                     mention_total_limit: Some(mention_total_limit),
+//                     ..default
+//                 }),
+//             };
+//             println!("self.actions = {:?}", self.actions);
+//             RawAutoModRule {
+//                 id: self.id,
+//                 guild_id: self.guild,
+//                 name: &self.name,
+//                 creator_id: self.creator,
+//                 event_type: self.event_type,
+//                 trigger_type,
+//                 trigger_metadata,
+//                 actions: (&self.actions).into(),
+//                 enabled: self.enabled,
+//                 exempt_roles: (&self.exempt_roles).into(),
+//                 exempt_channels: (&self.exempt_channels).into(),
+//             }.serialize(s)
+//         }
+//     }
+//
+//     impl<'de> Deserialize<'de> for AutoModRule {
+//         fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+//             let RawAutoModRule {
+//                 id,
+//                 guild_id,
+//                 name,
+//                 creator_id,
+//                 event_type,
+//                 trigger_type,
+//                 trigger_metadata: Metadata { keyword_filter, presets, allow_list, mention_total_limit },
+//                 actions,
+//                 enabled,
+//                 exempt_roles,
+//                 exempt_channels
+//             } = RawAutoModRule::deserialize(d)?;
+//             let trigger = match trigger_type {
+//                 1 => Trigger::Keyword { keyword_filter: keyword_filter.into() },
+//                 3 => Trigger::Spam,
+//                 4 => Trigger::KeywordPreset { presets: presets.into(), allow_list: allow_list.into() },
+//                 5 => mention_total_limit.map(|mention_total_limit| Trigger::MentionSpam { mention_total_limit })
+//                     .ok_or_else(|| D::Error::missing_field("Trigger::MentionSpam::mention_total_limit"))?,
+//                 unknown => return Err(D::Error::invalid_value(Unexpected::Unsigned(unknown as _), &"1, 3, 4, 5")),
+//             };
+//             println!("actions = {:?}", actions);
+//             Ok(Self {
+//                 id,
+//                 guild: guild_id,
+//                 name: name.to_string(),
+//                 creator: creator_id,
+//                 event_type,
+//                 trigger,
+//                 actions: actions.to_vec(),
+//                 enabled,
+//                 exempt_roles: exempt_roles.to_vec(),
+//                 exempt_channels: exempt_channels.to_vec(),
+//             })
+//         }
+//     }
+// }
 
 serde_repr! {
     pub enum KeywordPreset: u8 {
@@ -204,26 +218,52 @@ serde_repr! {
 
 serde_num_tag! {
     /// An action which will execute whenever a rule is triggered.
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub enum Action = "type": u8 as ActionType {
-        /// blocks the content of a message according to the rule
-        (1) = BlockMessage,
+        /// blocks a member's message and prevents it from being posted. A custom explanation can be
+        /// specified and shown to members whenever their message is blocked.
+        (1) = BlockMessage {
+            /// additional metadata needed during execution for this specific action type
+            #serde = default
+            #serde = skip_serializing_if = "Option::is_none"
+            metadata: Option<BlockMessage>,
+        },
         /// logs user content to a specified channel
         (2) = SendAlertMessage {
-           /// channel to which user content should be logged
-            channel_id: ChannelId,
+            /// additional metadata needed during execution for this specific action type
+            metadata: SendAlertMessage,
         },
         /// timeout user for a specified duration
         ///
         /// A TIMEOUT action can only be set up for KEYWORD and MENTION_SPAM rules. The MODERATE_MEMBERS
         /// permission is required to use the TIMEOUT action type.
         (3) = Timeout {
-            /// timeout duration in seconds
-            ///
-            /// Maximum of 2419200 seconds (4 weeks)
-            duration: u32,
+            /// additional metadata needed during execution for this specific action type
+            metadata: Timeout,
         },
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct BlockMessage {
+    /// additional explanation that will be shown to members whenever their message is blocked
+    ///
+    /// maximum of 150 characters
+    custom_message: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+pub struct SendAlertMessage {
+    /// channel to which user content should be logged
+    channel_id: ChannelId,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+pub struct Timeout {
+    /// timeout duration in seconds
+    ///
+    /// Maximum of 2419200 seconds (4 weeks)
+    duration_seconds: u32,
 }
 
 #[cfg(test)]
@@ -231,7 +271,9 @@ mod automod_tests {
     use super::*;
 
     fn assert(json: &str) {
+        // todo fix this so it doesn't error
         let rule: AutoModRule = serde_json::from_str(json).unwrap();
+        println!("rule = {:#?}", rule);
         let back = serde_json::to_string_pretty(&rule).unwrap();
         assert_eq!(json, back);
     }
@@ -243,36 +285,48 @@ mod automod_tests {
   "guild_id": "613425648685547541",
   "name": "Keyword Filter 1",
   "creator_id": "423457898095789043",
-  "event_type": 1,
   "trigger_type": 1,
-  "trigger_metadata": {
-    "keyword_filter": [
-      "cat*",
-      "*dog",
-      "*ana*",
-      "i like javascript"
-    ]
-  },
+  "event_type": 1,
   "actions": [
     {
       "type": 1,
-      "metadata": {}
+      "metadata": { "custom_message": "Please keep financial discussions limited to the #finance channel" }
     },
     {
       "type": 2,
-      "metadata": {
-        "channel_id": "123456789123456789"
-      }
+      "metadata": { "channel_id": "123456789123456789" }
+    },
+    {
+      "type": 3,
+      "metadata": { "duration_seconds": 60 }
     }
   ],
+  "trigger_metadata": {
+    "keyword_filter": ["cat*", "*dog", "*ana*", "i like c++"],
+    "regex_patterns": ["(b|c)at", "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"]
+  },
   "enabled": true,
-  "exempt_roles": [
-    "323456789123456789",
-    "423456789123456789"
-  ],
-  "exempt_channels": [
-    "523456789123456789"
-  ]
+  "exempt_roles": ["323456789123456789", "423456789123456789"],
+  "exempt_channels": ["523456789123456789"]
 }"#)
+    }
+
+    #[test]
+    fn asdsa() {
+        let rule = Action::BlockMessage {
+            metadata: None,
+        };
+        let string = serde_json::to_string_pretty(&rule).unwrap();
+        println!("{string}");
+    }
+
+    #[test]
+    fn kja() {
+        let json = r#"{
+      "type": 1,
+      "metadata": {}
+    }"#;
+        let action: Action = serde_json::from_str(json).unwrap();
+        println!("action = {:#?}", action);
     }
 }

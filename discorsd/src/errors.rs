@@ -5,23 +5,42 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-use crate::BotState;
+use crate::{BotState, serde_utils};
 use crate::commands::SlashCommandRaw;
 use crate::http::{ClientError, DisplayClientError};
+use crate::model::DiscordError;
 use crate::model::ids::*;
 use crate::model::interaction::{DmUser, GuildUser, InteractionDataOption, InteractionUser};
 
 #[derive(Error, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum BotError {
     #[error(transparent)]
     Client(#[from] ClientError),
     #[error(transparent)]
+    // todo!!!! big big big todo! this shouldn't be here (not specifically GameError), should be some generic type!
     Game(#[from] GameError),
     #[error(transparent)]
     CommandParse(#[from] CommandParseErrorInfo),
     #[error("Error converting `chrono::time::Duration` to `std::time::Duration`")]
     Chrono,
 }
+
+// since GameError is an enum, want to be able to Into its variants into BotError (maybe others too)
+macro_rules! bot_error_from {
+    ($e2:ty => $e1:ty) => {
+        impl From<$e2> for BotError {
+            fn from(e2: $e2) -> Self {
+                let e1: $e1 = e2.into();
+                e1.into()
+            }
+        }
+    };
+}
+bot_error_from!(reqwest::Error => ClientError);
+bot_error_from!(serde_utils::Error => ClientError);
+bot_error_from!(std::io::Error => ClientError);
+bot_error_from!(DiscordError => ClientError);
 
 impl BotError {
     pub async fn display_error<B: Send + Sync>(&self, state: &BotState<B>) -> DisplayBotError<'_> {
@@ -44,40 +63,31 @@ pub enum DisplayBotError<'a> {
 impl Display for DisplayBotError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Client(e) => write!(f, "{}", e),
-            Self::Game(e) => write!(f, "{}", e),
+            Self::Client(e) => write!(f, "{e}"),
+            Self::Game(e) => write!(f, "{e}"),
             Self::CommandParse(e) => f.write_str(e),
             Self::Chrono => f.write_str("Error converting `chrono::time::Duration` to `std::time::Duration`"),
         }
     }
 }
 
-// since GameError is an enum, want to be able to Into its variants into BotError (maybe others too)
-macro_rules! bot_error_from {
-    ($e2:ty, $e1:ty) => {
-        impl From<$e2> for BotError {
-            fn from(e2: $e2) -> Self {
-                let e1: $e1 = e2.into();
-                e1.into()
-            }
-        }
-    };
-}
-
 #[derive(Error, Debug)]
 pub enum GameError {
-    Avalon(#[from] AvalonError)
+    Avalon(#[from] AvalonError),
+    Hangman(#[from] HangmanError),
 }
 
 impl Display for GameError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Avalon(e) => write!(f, "{}", e),
+            Self::Avalon(e) => write!(f, "{e}"),
+            Self::Hangman(e) => write!(f, "{e}"),
         }
     }
 }
 
-bot_error_from!(AvalonError, GameError);
+bot_error_from!(AvalonError => GameError);
+bot_error_from!(HangmanError => GameError);
 
 #[derive(Error, Debug)]
 pub enum AvalonError {
@@ -89,9 +99,23 @@ pub enum AvalonError {
 impl Display for AvalonError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::TooManyPlayers(n) => write!(f, "Too many players! {} is more than the maximum number of players (10).", n),
+            Self::TooManyPlayers(n) => write!(f, "Too many players! {n} is more than the maximum number of players (10)."),
             Self::Stopped => f.write_str("Game Already Over"),
             Self::NotVoting => f.write_str("No longer in the voting phase"),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum HangmanError {
+    NoWords(ChannelId, Option<GuildId>),
+}
+
+impl Display for HangmanError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::NoWords(c, Some(g)) => write!(f, "No suitable words found in https://discord.com/channels/{g}/{c}"),
+            Self::NoWords(c, None) => write!(f, "No suitable words found in https://discord.com/channels/@me/{c}"),
         }
     }
 }
@@ -144,7 +168,7 @@ impl CommandParseErrorInfo {
         }
     }
 
-    fn command_fail_message<B: Send + Sync + 'static>(&self, source: &str, command: Option<&dyn SlashCommandRaw<Bot=B>>) -> String {
+    fn command_fail_message<B: 'static>(&self, source: &str, command: Option<&dyn SlashCommandRaw<Bot=B>>) -> String {
         if let Some(command) = command {
             format!(
                 "Failed to parse command `{}` ({}) in {}: {:?}",
@@ -161,7 +185,7 @@ impl CommandParseErrorInfo {
 
 impl Display for CommandParseErrorInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

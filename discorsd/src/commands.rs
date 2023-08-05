@@ -81,7 +81,7 @@ use crate::shard::dispatch::ReactionUpdate;
 #[async_trait]
 pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + SlashCommandRaw<Bot=<Self as SlashCommand>::Bot> {
     /// Your discord bot. Should probably implement [`Bot`](crate::Bot).
-    type Bot: Send + Sync;
+    type Bot;
     /// The type of data this command has. Can be `()` for commands which have no arguments.
     /// Otherwise, the best way to implement `CommandData` for your data is with
     /// `#[derive(CommandData)]`.
@@ -125,10 +125,10 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
     ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError>;
 }
 
-#[allow(clippy::use_self)]
 #[async_trait]
 impl<SC: SlashCommand> SlashCommandRaw for SC
-    where InteractionUse<AppCommandData, <Self as SlashCommand>::Use>: FinalizeInteraction<AppCommandData>
+    where InteractionUse<AppCommandData, <Self as SlashCommand>::Use>: FinalizeInteraction<AppCommandData>,
+          <Self as SlashCommand>::Bot: Send + Sync,
 {
     type Bot = <Self as SlashCommand>::Bot;
 
@@ -154,12 +154,12 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
             Ok(options) => match <Self as SlashCommand>::Data::from_options(options) {
                 Ok(data) => {
                     let self_use = SlashCommand::run(self, Arc::clone(&state), interaction, data).await?;
-                    self_use.finalize(&state).await.map_err(|e| e.into())
+                    self_use.finalize(&state).await.map_err(Into::into)
                 }
                 Err(error) => {
                     let interaction = interaction.respond(
                         state,
-                        ephemeral(format!("Error parsing command: ```rs\n{:?}```", error)),
+                        ephemeral(format!("Error parsing command: ```rs\n{error:?}```")),
                     ).await?;
                     Err(CommandParseErrorInfo {
                         name: interaction.data.command_name,
@@ -172,7 +172,7 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
             Err(error) => {
                 let interaction = interaction.respond(
                     state,
-                    ephemeral(format!("Error parsing command: ```rs\n{:?}```", error)),
+                    ephemeral(format!("Error parsing command: ```rs\n{error:?}```")),
                 ).await?;
                 Err(CommandParseErrorInfo {
                     name: interaction.data.command_name,
@@ -199,7 +199,7 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
 /// This is implemented for all types which implement [SlashCommand].
 #[async_trait]
 pub trait SlashCommandRaw: Send + Sync + Debug + Downcast + DynClone {
-    type Bot: Send + Sync;
+    type Bot;
 
     fn name(&self) -> &'static str;
 
@@ -221,7 +221,7 @@ impl<'clone, B> Clone for Box<dyn SlashCommandRaw<Bot=B> + 'clone> {
 
 /// Allow your bot to respond to reactions.
 #[async_trait]
-pub trait ReactionCommand<B: Send + Sync>: Send + Sync + Debug + Downcast + DynClone {
+pub trait ReactionCommand<B>: Send + Sync + Debug + Downcast + DynClone {
     fn applies(&self, reaction: &ReactionUpdate) -> bool;
 
     async fn run(&self,
@@ -229,8 +229,10 @@ pub trait ReactionCommand<B: Send + Sync>: Send + Sync + Debug + Downcast + DynC
                  reaction: ReactionUpdate,
     ) -> Result<(), BotError>;
 }
-impl_downcast!(ReactionCommand<B> where B: Send + Sync);
-clone_trait_object!(<B> ReactionCommand<B> where B: Send + Sync);
+impl_downcast!(ReactionCommand<B>);
+// impl_downcast!(ReactionCommand<B> where B: Send + Sync);
+clone_trait_object!(<B> ReactionCommand<B>);
+// clone_trait_object!(<B> ReactionCommand<B> where B: Send + Sync);
 
 /// Extension trait for [SlashCommand]s to edit them
 #[async_trait]
@@ -244,9 +246,8 @@ pub trait SlashCommandExt: SlashCommandRaw {
         guild: GuildId,
         command: CommandId,
     ) -> ClientResult<ApplicationCommand>
-        where
+        where B: 'static + Send + Sync,
             State: AsRef<BotState<B>> + Send,
-            B: Send + Sync + 'static
     {
         match self.command() {
             Command::SlashCommand { name, name_localizations, description, description_localizations, options } => {

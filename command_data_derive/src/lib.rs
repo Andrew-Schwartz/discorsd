@@ -423,7 +423,6 @@
 #![allow(
     clippy::similar_names,
     clippy::option_if_let_else,
-    clippy::filter_map,
     clippy::default_trait_access,
     // pedantic
     clippy::wildcard_imports,
@@ -521,7 +520,7 @@ pub fn derive_option(input: TokenStream) -> TokenStream {
 }
 
 fn dummy_impl(ty: &Ident) {
-    let fail_enum = Ident::new(&format!("{}DeriveFailed", ty), Span::call_site());
+    let fail_enum = Ident::new(&format!("{ty}DeriveFailed"), Span::call_site());
     set_dummy(quote! {
         enum #fail_enum {}
         impl ::discorsd::commands::OptionsLadder for #fail_enum {
@@ -581,7 +580,7 @@ pub fn derive_menu(input: TokenStream) -> TokenStream {
             ty,
             "Can't derive `MenuCommand` on a Struct"
         ),
-        Data::Enum(data) => menu_command::menu_impl(&ty, data, input.attrs),
+        Data::Enum(data) => menu_command::menu_impl(&ty, data, &input.attrs),
         Data::Union(_) => abort!(
             ty,
             "Can't derive `MenuCommand` on a Union"

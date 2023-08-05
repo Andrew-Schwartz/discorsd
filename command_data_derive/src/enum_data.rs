@@ -81,7 +81,7 @@ pub struct Enum {
 }
 
 impl Enum {
-    //noinspection RsSelfConvention
+    #[allow(clippy::wrong_self_convention)]
     fn from_options_branches(&self, ty: &Ident, command_ty: &TokenStream2) -> TokenStream2 {
         let branches = self.variants.iter().map(|v| {
             // todo filter out the attributes this used (might not be a thing)
@@ -114,7 +114,7 @@ impl Enum {
             let options = strukt.data_options(command_type);
             let take = if let Some(enable) = &v.enable_if {
                 quote_spanned! { enable.span() =>
-                    .take(#enable(command) as usize)
+                    .take(usize::from(#enable(command)))
                 }
             } else {
                 TokenStream2::new()

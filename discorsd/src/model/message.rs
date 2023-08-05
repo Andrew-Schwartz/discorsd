@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter, Write};
@@ -615,6 +616,7 @@ impl EmbedFooter {
         }
     }
 
+    #[must_use]
     pub fn icon_url<S: ToString>(mut self, icon_url: S) -> Self {
         self.icon_url = Some(icon_url.to_string());
         self
@@ -640,8 +642,8 @@ impl EmbedField {
     fn checked<S: ToString, V: ToString>(name: S, value: V, inline: bool) -> Self {
         let name = name.to_string();
         let value = value.to_string();
-        assert!(!name.is_empty(), "field names cannot be empty (value = {:?})", value);
-        assert!(!value.is_empty(), "field values cannot be empty (name = {})", name);
+        assert!(!name.is_empty(), "field names cannot be empty (value = {value:?})");
+        assert!(!value.is_empty(), "field values cannot be empty (name = {name})");
         Self { name, value, inline }
     }
 
@@ -673,16 +675,19 @@ impl EmbedField {
         ("\u{200B}", "\u{200B}", true)
     }
 
+    #[must_use]
     pub fn name<S: ToString>(mut self, name: S) -> Self {
         self.name = name.to_string();
         self
     }
 
+    #[must_use]
     pub fn value<S: ToString>(mut self, value: S) -> Self {
         self.value = value.to_string();
         self
     }
 
+    #[must_use]
     pub fn inline(mut self, inline: bool) -> Self {
         self.inline = inline;
         self
@@ -778,6 +783,7 @@ pub trait TextMarkup {
     fn italicize(self) -> String;
     fn bold(self) -> String;
     fn underline(self) -> String;
+    fn strikethrough(self) -> String;
     fn code_inline(self) -> String;
     fn code_block(self, lang: &str) -> String;
 }
@@ -799,6 +805,10 @@ impl TextMarkup for String {
 
     fn underline(self) -> String {
         surround_string(self, "__")
+    }
+
+    fn strikethrough(self) -> String {
+        surround_string(self, "~~")
     }
 
     fn code_inline(self) -> String {
@@ -824,12 +834,60 @@ impl<'a> TextMarkup for &'a str {
         format!("__{self}__")
     }
 
+    fn strikethrough(self) -> String {
+        format!("~~{self}~~")
+    }
+
     fn code_inline(self) -> String {
         format!("`{self}`")
     }
 
     fn code_block(self, lang: &str) -> String {
         format!("```{lang}\n{self}```")
+    }
+}
+
+impl<'a> TextMarkup for Cow<'a, str> {
+    fn italicize(self) -> String {
+        match self {
+            Cow::Borrowed(b) => b.italicize(),
+            Cow::Owned(o) => o.italicize(),
+        }
+    }
+
+    fn bold(self) -> String {
+        match self {
+            Cow::Borrowed(b) => b.bold(),
+            Cow::Owned(o) => o.bold(),
+        }
+    }
+
+    fn underline(self) -> String {
+        match self {
+            Cow::Borrowed(b) => b.underline(),
+            Cow::Owned(o) => o.underline(),
+        }
+    }
+
+    fn strikethrough(self) -> String {
+        match self {
+            Cow::Borrowed(b) => b.strikethrough(),
+            Cow::Owned(o) => o.strikethrough(),
+        }
+    }
+
+    fn code_inline(self) -> String {
+        match self {
+            Cow::Borrowed(b) => b.code_inline(),
+            Cow::Owned(o) => o.code_inline(),
+        }
+    }
+
+    fn code_block(self, lang: &str) -> String {
+        match self {
+            Cow::Borrowed(b) => b.code_block(lang),
+            Cow::Owned(o) => o.code_block(lang),
+        }
     }
 }
 

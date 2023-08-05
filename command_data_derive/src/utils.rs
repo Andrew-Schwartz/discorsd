@@ -33,7 +33,7 @@ pub fn use_generics(generics: &[TypeParam]) -> TokenStream2 {
 pub fn replace_generics(format_string: &mut String, generics: &[TypeParam]) -> Option<TokenStream2> {
     let mut generics_used = Vec::new();
     for TypeParam { ident, .. } in generics {
-        let pattern = format!("<{}>", ident);
+        let pattern = format!("<{ident}>");
         if let Some(idx) = format_string.find(&pattern) {
             format_string.replace_range(idx..idx + pattern.len(), "{}");
             generics_used.push(ident);
@@ -91,7 +91,7 @@ pub trait TypeExt {
 
 impl TypeExt for Type {
     fn generic_type_by<F: FnOnce(&Ident) -> bool>(&self, pred: F) -> Option<&Type> {
-        if let Type::Path(path) = self {
+        if let Self::Path(path) = self {
             let seg = path.path.segments.first()?;
             if !pred(&seg.ident) { return None; }
             if let PathArguments::AngleBracketed(args) = &seg.arguments {
@@ -109,7 +109,7 @@ impl TypeExt for Type {
     }
 
     fn array_type(&self) -> Option<&Type> {
-        if let Type::Array(array) = self {
+        if let Self::Array(array) = self {
             Some(&array.elem)
         } else {
             None
@@ -117,7 +117,7 @@ impl TypeExt for Type {
     }
 
     fn without_generics(&self) -> Option<&Ident> {
-        if let Type::Path(path) = self {
+        if let Self::Path(path) = self {
             path.path.segments.first().map(|seg| &seg.ident)
         } else {
             None
@@ -143,10 +143,10 @@ impl<T, I: Iterator<Item=T>> IteratorJoin for I {
                 // estimate lower bound of capacity needed
                 let (lower, _) = self.size_hint();
                 let mut result = String::with_capacity(sep.len() * lower);
-                write!(&mut result, "{}", first_elt).unwrap();
+                write!(&mut result, "{first_elt}").unwrap();
                 for elt in self {
                     result.push_str(sep);
-                    write!(&mut result, "{}", elt).unwrap();
+                    write!(&mut result, "{elt}").unwrap();
                 }
                 result
             }

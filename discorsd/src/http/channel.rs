@@ -54,16 +54,32 @@ impl DiscordClient {
     //     self.patch(api!("/channels/{}", id), json).await
     // }
 
+    /// Returns the messages in the channel. If operating on a guild channel, this endpoint requires
+    /// the user to have the [`VIEW_CHANNEL`](Permissions::VIEW_CHANNEL) and permission. If the
+    /// channel is a voice channel, they must *also* have the [`CONNECT`](Permissions::CONNECT)
+    /// permission.
+    ///
+    /// If the current user is missing the
+    /// [`READ_MESSAGE_HISTORY`](Permissions::READ_MESSAGE_HISTORY) permission in the channel, then
+    /// no messages will be returned.
+    ///
+    /// # Errors
+    ///
+    /// If the http request fails, or fails to deserialize the response into a `Vec<Message>`.
+    pub async fn get_messages(&self, channel: ChannelId, get: GetMessages) -> ClientResult<Vec<Message>> {
+        self.get_query(GetChannelMessages(channel), get).await
+    }
+
     /// Returns a specific message in the channel. If operating on a guild channel, this endpoint
-    /// requires the
-    /// [`READ_MESSAGE_HISTORY`](crate::model::permissions::Permissions::READ_MESSAGE_HISTORY)
-    /// permission to be present on the current user.
+    /// requires the user to have the [`VIEW_CHANNEL`](Permissions::VIEW_CHANNEL) and
+    /// [`READ_MESSAGE_HISTORY`](Permissions::READ_MESSAGE_HISTORY) permission. If the channel is a
+    /// voice channel, they must *also* have the [`CONNECT`](Permissions::CONNECT) permission.
     ///
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `Message`.
     pub async fn get_message(&self, channel: ChannelId, message: MessageId) -> ClientResult<Message> {
-        self.get(GetMessage(channel, message)).await
+        self.get(GetChannelMessage(channel, message)).await
     }
 
     /// Post a message in the specified channel
@@ -249,9 +265,9 @@ pub trait MessageChannelExt: Id<Id=ChannelId> {
     /// Returns [ClientError::Perms] if the bot is missing any of the necessary permissions, or
     /// an other variant if the request fails for another reason.
     async fn send<State, Msg, B>(&self, state: State, message: Msg) -> ClientResult<Message>
-        where State: AsRef<BotState<B>> + Send + Sync,
-              B: Send + Sync + 'static,
-              Msg: Into<CreateMessage> + Send + Sync,
+        where State: AsRef<BotState<B>> + Send,
+              B: 'static + Send + Sync,
+              Msg: Into<CreateMessage> + Send,
     {
         let state = state.as_ref();
         let message = message.into();
@@ -260,14 +276,14 @@ pub trait MessageChannelExt: Id<Id=ChannelId> {
             let perms = Permissions::get_own(&state.cache, &channel, channel.guild_id().unwrap()).await;
             let check_perms = |perm: Permissions|
                 (perms.contains(perm))
-                    .then(|| ())
+                    .then_some(())
                     .ok_or(ClientError::Perms(perm));
             check_perms(Permissions::SEND_MESSAGES)?;
             if message.tts {
-                check_perms(Permissions::SEND_TTS_MESSAGES)?
+                check_perms(Permissions::SEND_TTS_MESSAGES)?;
             }
             if message.message_reference.is_some() {
-                check_perms(Permissions::READ_MESSAGE_HISTORY)?
+                check_perms(Permissions::READ_MESSAGE_HISTORY)?;
             }
         }
 
@@ -358,9 +374,9 @@ impl ChannelMessageId {
     }
 
     pub async fn reply<B, State, Msg>(&self, state: State, message: Msg) -> ClientResult<Message>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync,
-              Msg: Into<CreateMessage> + Send + Sync,
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
+              Msg: Into<CreateMessage> + Send,
     {
         let state = state.as_ref();
         let mut message = message.into();
@@ -423,12 +439,63 @@ impl Message {
         self.cmid().unpin(client).await
     }
 
-    pub async fn reply<B, State, Msg>(&self, state: State, message: Msg) -> ClientResult<Message>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync,
-              Msg: Into<CreateMessage> + Send + Sync,
+    pub async fn reply<B, State, Msg>(&self, state: State, message: Msg) -> ClientResult<Self>
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
+              Msg: Into<CreateMessage> + Send,
     {
         self.cmid().reply(state, message).await
+    }
+}
+
+#[derive(Serialize, Copy, Clone, Default)]
+pub struct GetMessages {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    around: Option<MessageId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    before: Option<MessageId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    after: Option<MessageId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit: Option<usize>,
+}
+
+impl GetMessages {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn around(self, message: MessageId) -> Self {
+        Self {
+            around: Some(message),
+            limit: self.limit,
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn before(self, message: MessageId) -> Self {
+        Self {
+            before: Some(message),
+            limit: self.limit,
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn after(self, message: MessageId) -> Self {
+        Self {
+            after: Some(message),
+            limit: self.limit,
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
+        self
     }
 }
 
@@ -473,6 +540,7 @@ pub enum AttachmentSource {
 }
 
 impl AttachmentSource {
+    #[allow(clippy::result_large_err)]
     fn into_bytes(self) -> ClientResult<Vec<u8>> {
         match self {
             Self::Path(path) => std::fs::read(path).map_err(ClientError::Io),
@@ -657,7 +725,7 @@ impl From<Message> for CreateMessage {
             files: message.attachments.into_iter()
                 .map(|a| MessageAttachment::from_url(a.filename, &a.url).unwrap())
                 .collect(),
-            embeds: message.embeds.into_iter().map(|embed| embed.into()).collect(),
+            embeds: message.embeds.into_iter().map(Into::into).collect(),
             // todo
             allowed_mentions: None,
             message_reference: message.message_reference,
@@ -728,7 +796,7 @@ impl CreateMessage {
     pub fn embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) {
         self.try_embed(builder)
             .map_err(|_| "can't send more than 10 embeds")
-            .unwrap()
+            .unwrap();
     }
 
     /// Add an embed to the [CreateMessage](CreateMessage).
@@ -759,7 +827,7 @@ impl CreateMessage {
     }
 
     pub fn button<B, State, C, F>(&mut self, state: State, command: C, builder: F)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               C: ButtonCommand<Bot=B>,
               F: FnOnce(&mut Button),
@@ -767,12 +835,12 @@ impl CreateMessage {
         let mut button = Button::new();
         builder(&mut button);
         state.as_ref().register_button(&mut button, Box::new(command));
-        self.components.push(ActionRow::buttons(vec![button]))
+        self.components.push(ActionRow::buttons(vec![button]));
         // self.buttons(iter::once(button))
     }
 
     pub fn buttons<B, State, I>(&mut self, state: State, buttons: I)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               I: IntoIterator<Item=(Box<dyn ButtonCommand<Bot=B>>, Button)>,
     {
@@ -782,11 +850,11 @@ impl CreateMessage {
                 button
             })
             .collect();
-        self.components.push(ActionRow::buttons(buttons))
+        self.components.push(ActionRow::buttons(buttons));
     }
 
     pub fn menu<B, State, C, F, D>(&mut self, state: State, command: C, builder: F)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               C: MenuCommand<Bot=B, Data=D>,
               D: MenuData,
@@ -798,7 +866,7 @@ impl CreateMessage {
         menu.options = D::options();
         builder(&mut menu);
         state.as_ref().register_menu(&mut menu, Box::new(command));
-        self.components.push(ActionRow::menu(menu))
+        self.components.push(ActionRow::menu(menu));
     }
 }
 
@@ -929,11 +997,13 @@ impl RichEmbed {
     ///     // etc...
     /// });
     /// ```
+    #[must_use]
     pub fn build_new<F: FnOnce(&mut Self)>(builder: F) -> Self {
         Self::build(Self::default(), builder)
     }
 
     /// Build a `CreateMessage` by modifying an already existing `CreateMessage`.
+    #[must_use]
     pub fn build<F: FnOnce(&mut Self)>(mut self, builder: F) -> Self {
         builder(&mut self);
         self
@@ -967,7 +1037,7 @@ impl RichEmbed {
     ///
     /// To set the timestamp to an arbitrary time, use [timestamp](Self::timestamp).
     pub fn timestamp_now(&mut self) {
-        self.timestamp = Some(chrono::Utc::now());
+        self.timestamp = Some(Utc::now());
     }
 
     /// Sets this embed's [color](Self::color).
@@ -1035,7 +1105,7 @@ impl RichEmbed {
     /// Panics if either `name` or `value` are empty. To add a blank field, use
     /// [`add_blank_field`](Self::add_blank_field).
     pub fn add_field<S: ToString, V: ToString>(&mut self, name: S, value: V) {
-        self.field(EmbedField::new(name, value))
+        self.field(EmbedField::new(name, value));
     }
 
     /// Adds a new inline field to this embed with the specified name and value. Inline fields will
@@ -1046,18 +1116,18 @@ impl RichEmbed {
     /// Panics if either `name` or `value` are empty. To add a blank inline field, use
     /// [`add_blank_inline_field`](Self::add_blank_inline_field).
     pub fn add_inline_field<S: ToString, V: ToString>(&mut self, name: S, value: V) {
-        self.field(EmbedField::new_inline(name, value))
+        self.field(EmbedField::new_inline(name, value));
     }
 
     /// Adds a blank field ([`EmbedField::blank`]) to this embed. Useful for spacing embed fields.
     pub fn add_blank_field(&mut self) {
-        self.field(EmbedField::blank())
+        self.field(EmbedField::blank());
     }
 
     /// Adds a blank inline field ([`EmbedField::blank_inline`]) to this embed. Useful for spacing
     /// embed fields.
     pub fn add_blank_inline_field(&mut self) {
-        self.field(EmbedField::blank_inline())
+        self.field(EmbedField::blank_inline());
     }
 
     /// Adds a field to this embed. `Into<EmbedField>` is implemented on `(N, V)` and `(N, V, bool)`,
@@ -1146,7 +1216,7 @@ impl<S: Into<Cow<'static, str>>> From<S> for EditMessage {
 
 impl From<RichEmbed> for EditMessage {
     fn from(e: RichEmbed) -> Self {
-        Self { embeds: Some(vec!(e)), ..Default::default() }
+        Self { embeds: Some(vec![e]), ..Default::default() }
     }
 }
 
@@ -1166,7 +1236,7 @@ impl From<Message> for EditMessage {
 impl From<CreateMessage> for EditMessage {
     fn from(message: CreateMessage) -> Self {
         Self {
-            content: Some(Some(message.content.into())),
+            content: Some(Some(message.content)),
             embeds: Some(message.embeds.into_iter().map(RichEmbed::from).collect()),
             flags: (!message.flags.is_empty()).then_some(message.flags),
             // todo
@@ -1223,7 +1293,7 @@ impl EditMessage {
         let embed = self.embeds.as_mut()
             .and_then(Vec::pop)
             .unwrap_or_default();
-        self.embeds = Some(vec!(RichEmbed::build(embed, builder)));
+        self.embeds = Some(vec![RichEmbed::build(embed, builder)]);
     }
 
     /// Clear the embed of this message.
@@ -1243,10 +1313,10 @@ pub(in super) trait MessageWithFiles/*: Serialize*/ {
 
         let mut files = self.files().map(take).unwrap_or_default();
         if let Some(embeds) = self.embeds() {
-            files.extend(embeds.into_iter()
+            files.extend(embeds.iter_mut()
                 .map(|e| &mut e.files)
                 .flat_map(take)
-            )
+            );
         }
         files
     }

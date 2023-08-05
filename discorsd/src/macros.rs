@@ -147,6 +147,7 @@ macro_rules! serde_repr {
 // todo error if any tag_value's repeat
 macro_rules! serde_num_tag {
     // some helper macros
+
     // `type` as `new_enum`
     (
         make_serde_repr

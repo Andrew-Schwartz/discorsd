@@ -92,7 +92,7 @@ impl Default for CurrentGuildQuery {
 #[async_trait]
 pub trait UserExt: Id<Id=UserId> + Sized {
     async fn dm<B, State>(&self, state: State) -> ClientResult<DmChannel>
-        where B: Send + Sync + 'static,
+        where B: 'static + Send + Sync,
               State: AsRef<BotState<B>> + Send,
     {
         let state = state.as_ref();
@@ -115,10 +115,10 @@ pub trait UserExt: Id<Id=UserId> + Sized {
         &self,
         state: State,
         message: Msg,
-    ) -> ClientResult<Message> where
-        B: Send + Sync + 'static,
-        State: AsRef<BotState<B>> + Send + Sync,
-        Msg: Into<CreateMessage> + Send + Sync,
+    ) -> ClientResult<Message>
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send + Sync,
+              Msg: Into<CreateMessage> + Send + Sync,
     {
         let dm = self.dm(&state).await?;
         // no permissions in a dm channel

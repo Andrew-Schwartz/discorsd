@@ -68,8 +68,8 @@ impl std::error::Error for SpanError {}
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Serde(serde) => write!(f, "{}", serde),
-            Self::Span(span) => write!(f, "{}", span),
+            Self::Serde(serde) => write!(f, "{serde}"),
+            Self::Span(span) => write!(f, "{span}"),
         }
     }
 }

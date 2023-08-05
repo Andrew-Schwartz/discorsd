@@ -29,7 +29,7 @@ pub mod interaction;
 pub mod interaction_response;
 
 /// Information returned from the `/gateway/bot` endpoint, as in
-/// [gateway](crate::http::DiscordClient::gateway).
+/// [gateway](crate::http::DiscordClient::gateway_bot).
 #[derive(Deserialize, Debug)]
 pub struct BotGateway {
     /// The WSS URL that can be used for connecting to the gateway
@@ -50,7 +50,7 @@ pub struct DiscordError {
 
 impl Display for DiscordError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

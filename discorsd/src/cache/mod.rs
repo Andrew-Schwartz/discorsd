@@ -68,6 +68,18 @@ impl Cache {
             .expect("should not get `bot.user` before `Ready` fires")
     }
 
+    /// Gets the current user's Id.
+    ///
+    /// # Panics
+    ///
+    /// If somehow used before [`Ready`](crate::shard::dispatch::Ready) is received.
+    pub async fn own_user_id(&self) -> UserId {
+        self.user.read().await
+            .as_ref()
+            .map(User::id)
+            .expect("should not get `bot.user` before `Ready` fires")
+    }
+
     pub async fn user<U: Id<Id=UserId> + Send>(&self, id: U) -> Option<User> {
         self.users.read().await.get(id).cloned()
     }
@@ -90,7 +102,7 @@ impl Cache {
             Some(ChannelType::Category) => self.categories.read().await.get(&id).cloned().map(Channel::Category),
             Some(ChannelType::Announcement) => self.news.read().await.get(&id).cloned().map(Channel::Announcement),
             // Some(ChannelType::GuildStore) => self.stores.read().await.get(&id).cloned().map(Channel::Store),
-            Some(ChannelType::GroupDm) | Some(ChannelType::Voice) | None => None,
+            Some(ChannelType::GroupDm | ChannelType::Voice) | None => None,
             // todo
             Some(ChannelType::AnnouncementThread) => None,
             Some(ChannelType::PublicThread) => None,
@@ -182,7 +194,7 @@ impl Cache {
             interaction_responses,
             commands
         } = self;
-        #[allow(clippy::eval_order_dependence)]
+        #[allow(clippy::mixed_read_write_in_expression)]
         DebugCache {
             user: user.read().await,
             application: application.get(),
@@ -225,7 +237,7 @@ pub struct DebugCache<'a> {
 }
 
 /// A map of objects, with keys given by the object's id
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdMap<T: Id>(HashMap<T::Id, T>);
 
 #[allow(clippy::needless_pass_by_value)]

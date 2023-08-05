@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -101,10 +99,10 @@ impl Channel {
 
     pub fn overwrites(&self) -> Option<&[Overwrite]> {
         match self {
-            Self::Text(t) => Some(t.permission_overwrites.deref()),
-            Self::Voice(v) => Some(v.permission_overwrites.deref()),
-            Self::Category(c) => Some(c.permission_overwrites.deref()),
-            Self::Announcement(n) => Some(n.permission_overwrites.deref()),
+            Self::Text(t) => Some(&t.permission_overwrites),
+            Self::Voice(v) => Some(&v.permission_overwrites),
+            Self::Category(c) => Some(&c.permission_overwrites),
+            Self::Announcement(n) => Some(&n.permission_overwrites),
             // Self::Store(s) => Some(&s.permission_overwrites),
             Self::Dm(_) | Self::GroupDm(_) => None,
             // todo

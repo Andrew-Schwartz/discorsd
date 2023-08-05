@@ -14,8 +14,8 @@ use crate::model::components::ActionRow;
 use crate::model::emoji::{CustomEmoji, Emoji};
 use crate::model::guild::{ExplicitFilterLevel, Guild, GuildFeature, GuildMember, Integration, MfaLevel, NotificationLevel, PremiumTier, SystemChannelFlags, UnavailableGuild, VerificationLevel};
 use crate::model::ids::*;
-use crate::model::message::{Attachment, ChannelMention, ChannelMessageId, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageInteraction, MessageReference, MessageType, Reaction, StickerItem};
 use crate::model::interaction::{ApplicationCommandData, Interaction, InteractionData};
+use crate::model::message::{Attachment, ChannelMention, ChannelMessageId, Embed, Message, MessageActivity, MessageApplication, MessageFlags, MessageInteraction, MessageReference, MessageType, Reaction, StickerItem};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::model::voice::VoiceState;
@@ -117,7 +117,7 @@ pub(crate) enum DispatchPayload {
 }
 
 #[async_trait]
-impl<'a> Update for DispatchPayload {
+impl Update for DispatchPayload {
     async fn update(&self, cache: &Cache) {
         use DispatchPayload::*;
         match self {
@@ -212,6 +212,8 @@ pub struct Ready {
     pub guilds: Vec<UnavailableGuild>,
     /// used for resuming connections
     pub session_id: String,
+    /// Gateway URL for resuming connections
+    pub resume_gateway_url: String,
     /// the shard information associated with this session, if sent when identifying
     pub shard: Option<(u64, u64)>,
     /// partial application information
@@ -246,7 +248,7 @@ impl Update for Ready {
         // *cache.application.write().await = Some(self.application);
         *cache.user.write().await = Some(self.user.clone());
         cache.users.write().await.insert(self.user.clone());
-        cache.unavailable_guilds.write().await.extend(self.guilds.clone())
+        cache.unavailable_guilds.write().await.extend(self.guilds.clone());
     }
 }
 
@@ -260,6 +262,7 @@ pub struct Resumed {
 #[async_trait]
 impl Update for Resumed {
     async fn update(&self, _cache: &Cache) {
+        println!("self._trace = {:?}", self._trace);
         // don't think we need to update anything here
     }
 }
@@ -385,7 +388,7 @@ pub struct ChannelDelete {
 #[async_trait]
 impl Update for ChannelDelete {
     async fn update(&self, cache: &Cache) {
-        println!("DELETE self = {:#?}", self);
+        println!("DELETE channel = {self:#?}");
         cache.channel_types.write().await.remove(&self.channel.id());
         match &self.channel {
             Channel::Text(text) => { cache.channels.write().await.remove(text); }
@@ -443,7 +446,7 @@ impl Update for ChannelPinsUpdate {
                         channel.last_pin_timestamp = last_pin_timestamp;
                     });
             }
-            Some(ChannelType::Voice) | Some(ChannelType::Category) => {}
+            Some(ChannelType::Voice | ChannelType::Category) => {}
             Some(ChannelType::GroupDm) | None => {}
             // todo
             Some(ChannelType::AnnouncementThread) => {}
@@ -935,17 +938,17 @@ impl Update for GuildCreate {
                         Channel::Text(text) => {
                             let mut text = text.clone();
                             text.guild_id = Some(self.guild.id);
-                            t.push(text)
+                            t.push(text);
                         }
                         Channel::Category(category) => {
                             let mut category = category.clone();
                             category.guild_id = Some(self.guild.id);
-                            c.push(category)
+                            c.push(category);
                         }
                         Channel::Announcement(news) => {
                             let mut news = news.clone();
                             news.guild_id = Some(self.guild.id);
-                            n.push(news)
+                            n.push(news);
                         }
                         // Channel::Store(store) => s.push(store.clone()),
                         Channel::Voice(_) => {
@@ -1145,7 +1148,7 @@ pub struct EmojiUpdate {
 #[async_trait]
 impl Update for EmojiUpdate {
     async fn update(&self, cache: &Cache) {
-        println!("self = {:#?}", self);
+        println!("UPDATE emoji = {self:#?}");
         cache.guilds.write().await.entry(self.guild_id)
             .and_modify(|guild| self.emojis.iter()
                 .cloned()
@@ -1252,7 +1255,7 @@ pub struct GuildMemberUpdate {
 #[async_trait]
 impl Update for GuildMemberUpdate {
     async fn update(&self, cache: &Cache) {
-        println!("self = {:?}", self);
+        println!("UPDATE guild_member = {self:?}");
         let mut guard = cache.members.write().await;
         let option = guard.get_mut(&self.user.id)
             .and_then(|map| map.get_mut(&self.guild_id));
@@ -1452,9 +1455,9 @@ impl Update for MessageCreate {
                     news.last_message_id = Some(self.message.id);
                 }
             }
-            Some(ChannelType::Voice)
-            | Some(ChannelType::GroupDm)
-            | Some(ChannelType::Category)
+            Some(ChannelType::Voice
+                 | ChannelType::GroupDm
+                 | ChannelType::Category)
             | None => {}
             // todo
             Some(ChannelType::AnnouncementThread) => {}

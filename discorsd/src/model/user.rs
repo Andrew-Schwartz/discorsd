@@ -11,7 +11,7 @@ use crate::model::locales::Locale;
 /// separated by a distinction of "bot" vs "normal." Although they are similar, bot users are
 /// automated users that are "owned" by another user. Unlike normal users, bot users do not have a
 /// limitation on the number of Guilds they can be a part of.
-#[derive(Deserialize, Serialize, Debug, Clone, Eq, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq)]
 pub struct User {
     /// the user's id
     ///
@@ -145,6 +145,8 @@ bitflags! {
         const BUG_HUNTER_LEVEL_2 = 1 << 14;
         const VERIFIED_BOT = 1 << 16;
         const EARLY_VERIFIED_BOT_DEVELOPER = 1 << 17;
+        const UNDOCUMENTED_18 = 1 << 18;
+        const UNDOCUMENTED_19 = 1 << 19;
     }
 }
 // #[allow(clippy::use_self)]

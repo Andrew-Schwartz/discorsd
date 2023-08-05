@@ -12,13 +12,13 @@ use crate::commands::{ButtonCommand, MenuCommand, MenuData};
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::http::routes::Route::*;
+use crate::model::{command, message};
+use crate::model::command::{ApplicationCommand, Command};
 use crate::model::components::{ActionRow, Button, Component, Menu};
 use crate::model::ids::*;
+use crate::model::interaction::Token;
 use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
 use crate::model::message::{AllowedMentions, Message, MessageFlags};
-use crate::model::command;
-use crate::model::command::{ApplicationCommand, Command};
-use crate::model::interaction::Token;
 
 impl DiscordClient {
     /// Fetch all of the global commands for your application.
@@ -296,20 +296,6 @@ impl DiscordClient {
         token: Token,
         response: InteractionResponse,
     ) -> ClientResult<InteractionResponse> {
-        // match response {
-        //     InteractionResponse::Pong
-        //     | InteractionResponse::DeferredChannelMessageWithSource
-        //     | InteractionResponse::DeferredUpdateMessage => {
-        //         self.post_unit(
-        //             CreateInteractionResponse(interaction, token),
-        //             &response,
-        //         ).await.map(|()| response)
-        //     }
-        //     InteractionResponse::ChannelMessageWithSource(message)
-        //     | InteractionResponse::UpdateMessage(message) => {
-        //
-        //     }
-        // }
         self.send_message_with_files(
             CreateInteractionResponse(interaction, token),
             response.clone(),
@@ -319,10 +305,19 @@ impl DiscordClient {
         // //  todo do that ^ everywhere? maybe not since then it gets more separated from why/where
         // //   although it kinda already is iirc
         // //   wtf am I talking about here I'm confused
-        // self.post_unit(
-        //     CreateInteractionResponse(interaction, token),
-        //     &response,
-        // ).await.map(|()| response)
+    }
+
+    /// Returns the initial Interaction response. Functions the same as Get Webhook Message.
+    ///
+    /// # Errors
+    ///
+    /// If the http request fails
+    pub async fn get_original_interaction_response(
+        &self,
+        interaction: ApplicationId,
+        token: Token,
+    ) -> ClientResult<Message> {
+        self.get(GetOriginalInteractionResponse(interaction, token)).await
     }
 
     // todo link to EditWebhookMessage?
@@ -402,6 +397,45 @@ impl DiscordClient {
         message: MessageId,
     ) -> ClientResult<()> {
         self.delete(DeleteFollowupMessage(application, token, message)).await
+    }
+}
+
+impl Token {
+    pub async fn edit<B, State, Message>(&self, state: State, message: Message) -> ClientResult<message::Message>
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
+              Message: Into<InteractionMessage> + Send,
+    {
+        let state = state.as_ref();
+        state.client.edit_interaction_response(
+            state.application_id(),
+            self.clone(),
+            message.into(),
+        ).await
+    }
+
+    pub async fn delete<B, State>(&self, state: State) -> ClientResult<()>
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
+    {
+        let state = state.as_ref();
+        state.client.delete_interaction_response(
+            state.application_id(),
+            self.clone(),
+        ).await
+    }
+
+    pub async fn followup<B, State, Message>(&self, state: State, message: Message) -> ClientResult<message::Message>
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
+              Message: Into<WebhookMessage> + Send,
+    {
+        let state = state.as_ref();
+        state.client.create_followup_message(
+            state.application_id(),
+            self.clone(),
+            message.into(),
+        ).await
     }
 }
 
@@ -558,7 +592,7 @@ impl WebhookMessage {
     }
 
     pub fn button<B, State, C, F>(&mut self, state: State, command: C, builder: F)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               C: ButtonCommand<Bot=B>,
               F: FnOnce(&mut Button),
@@ -566,12 +600,12 @@ impl WebhookMessage {
         let mut button = Button::new();
         builder(&mut button);
         state.as_ref().register_button(&mut button, Box::new(command));
-        self.components.push(ActionRow::buttons(vec![button]))
+        self.components.push(ActionRow::buttons(vec![button]));
         // self.buttons(iter::once(button))
     }
 
-    pub fn buttons<B, State, I>(&mut self, state: State, buttons: I)
-        where B: Send + Sync + 'static,
+    pub fn button_row<B, State, I>(&mut self, state: State, buttons: I)
+        where B: 'static,
               State: AsRef<BotState<B>>,
               I: IntoIterator<Item=(Box<dyn ButtonCommand<Bot=B>>, Button)>,
     {
@@ -581,11 +615,11 @@ impl WebhookMessage {
                 button
             })
             .collect();
-        self.components.push(ActionRow::buttons(buttons))
+        self.components.push(ActionRow::buttons(buttons));
     }
 
     pub fn menu<B, State, C, F, D>(&mut self, state: State, command: C, builder: F)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               C: MenuCommand<Bot=B, Data=D>,
               D: MenuData,
@@ -597,6 +631,6 @@ impl WebhookMessage {
         menu.options = D::options();
         builder(&mut menu);
         state.as_ref().register_menu(&mut menu, Box::new(command));
-        self.components.push(ActionRow::menu(menu))
+        self.components.push(ActionRow::menu(menu));
     }
 }

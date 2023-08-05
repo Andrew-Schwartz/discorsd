@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
@@ -31,13 +32,13 @@ serde_num_tag! {
 }
 
 impl ActionRow {
-    pub fn action_row(components: Vec<Component>) -> Self {
+    pub fn new(components: Vec<Component>) -> Self {
         // todo validate at most 5 components
         Self::ActionRow { components }
     }
 
     pub fn buttons(buttons: Vec<Button>) -> Self {
-        Self::action_row(buttons.into_iter()
+        Self::new(buttons.into_iter()
             .map(Component::Button)
             .collect())
     }
@@ -45,11 +46,11 @@ impl ActionRow {
     pub fn menu<T: SelectMenuType>(menu: Menu<T>) -> Self
         where Component: From<Menu<T>>,
     {
-        Self::action_row(vec![menu.into()])
+        Self::new(vec![menu.into()])
     }
 
     pub fn text_input(input: TextInput) -> Self {
-        Self::action_row(vec![Component::TextInput(input)])
+        Self::new(vec![Component::TextInput(input)])
     }
 }
 
@@ -109,13 +110,13 @@ impl<S> From<S> for ComponentId
 }
 
 // todo have custom_id and url as an enum of some sort
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Button {
     /// one of button styles
     style: ButtonStyle,
     /// text that appears on the button, max 80 characters
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    label: Option<String>,
+    label: Option<Cow<'static, str>>,
     // todo just those fields not the whole emoji
     /// emoji name, id, and animated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -148,8 +149,8 @@ impl Button {
     }
 
     /// text that appears on the button, max 80 characters
-    pub fn label<S: ToString>(&mut self, label: S) {
-        self.label = Some(label.to_string());
+    pub fn label<S: Into<Cow<'static, str>>>(&mut self, label: S) {
+        self.label = Some(label.into());
     }
 
     /// one of button styles
@@ -226,7 +227,7 @@ pub struct Menu<T: SelectMenuType> {
     channel_types: T::ChannelTypes,
     /// custom placeholder text if nothing is selected, max 100 characters
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    placeholder: Option<String>,
+    placeholder: Option<Cow<'static, str>>,
     /// the minimum number of items that must be chosen; default 1, min 0, max 25
     #[serde(default, skip_serializing_if = "Option::is_none")]
     min_values: Option<usize>,
@@ -252,18 +253,18 @@ impl<T: SelectMenuType> Menu<T> {
     }
 
     /// custom placeholder text if nothing is selected, max 100 characters
-    pub fn placeholder<S: ToString>(&mut self, placeholder: S) {
-        self.placeholder = Some(placeholder.to_string());
+    pub fn placeholder<S: Into<Cow<'static, str>>>(&mut self, placeholder: S) {
+        self.placeholder = Some(placeholder.into());
     }
 
     /// the minimum number of items that must be chosen; default 1, min 0, max 25
     pub fn min_values(&mut self, min: usize) {
-        self.min_values = Some(min)
+        self.min_values = Some(min);
     }
 
     /// the maximum number of items that can be chosen; default 1, max 25
     pub fn max_values(&mut self, max: usize) {
-        self.max_values = Some(max)
+        self.max_values = Some(max);
     }
 
     /// the minimum (default 1, min 0, max 25) and maximum (default 1, max 25) number of items that
@@ -282,7 +283,7 @@ impl<T: SelectMenuType> Menu<T> {
 impl Menu<String> {
     /// the choices in the select, max 25
     pub fn options(&mut self, options: Vec<SelectOption>) {
-        self.options = options.into_iter().unique().collect();
+        self.options = options.into_iter().unique_by(|o| o.value.clone()).collect();
     }
 
     pub fn default_options<F: Fn(&str) -> bool>(&mut self, is_default: F) {
@@ -299,7 +300,7 @@ impl Menu<ChannelId> {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct SelectOption {
     /// the user-facing name of the option, max 100 characters
     pub label: String,
@@ -316,7 +317,7 @@ pub struct SelectOption {
     pub default: bool,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct TextInput {
     /// Developer-defined identifier for the input; max 100 characters
     pub custom_id: String,
@@ -384,7 +385,7 @@ mod tests {
         let message = MyMessage {
             content: "This is a message with components",
             components: vec![
-                ActionRow::action_row(vec![])
+                ActionRow::new(vec![])
             ],
         };
         test(CORRECT, message);
@@ -411,7 +412,7 @@ mod tests {
         let message = MyMessage {
             content: "This is a message with components",
             components: vec![
-                ActionRow::action_row(vec![Component::Button(
+                ActionRow::new(vec![Component::Button(
                     Button {
                         style: ButtonStyle::Primary,
                         label: Some("Click me!".to_string()),

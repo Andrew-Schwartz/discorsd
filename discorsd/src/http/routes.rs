@@ -9,7 +9,7 @@ use crate::model::interaction::Token;
 #[derive(Debug, Clone)]
 pub enum Route {
     // general
-    GetGateway,
+    GetGatewayBot,
     ApplicationInfo,
 
     // channels
@@ -20,7 +20,8 @@ pub enum Route {
     UnpinMessage(ChannelId, MessageId),
 
     // messages
-    GetMessage(ChannelId, MessageId),
+    GetChannelMessages(ChannelId),
+    GetChannelMessage(ChannelId, MessageId),
     PostMessage(ChannelId),
     EditMessage(ChannelId, MessageId),
     DeleteMessage(ChannelId, MessageId),
@@ -46,6 +47,7 @@ pub enum Route {
     DeleteGuildCommand(ApplicationId, GuildId, CommandId),
     BulkOverwriteGuildCommands(ApplicationId, GuildId),
     CreateInteractionResponse(InteractionId, Token),
+    GetOriginalInteractionResponse(ApplicationId, Token),
     EditInteractionResponse(ApplicationId, Token),
     DeleteInteractionResponse(ApplicationId, Token),
     CreateFollowupMessage(ApplicationId, Token),
@@ -73,7 +75,7 @@ pub enum Route {
 impl Route {
     pub fn url(&self) -> String {
         match self {
-            GetGateway => api!("/gateway/bot"),
+            GetGatewayBot => api!("/gateway/bot"),
             ApplicationInfo => api!("/oauth2/applications/@me"),
 
             GetChannel(c) => api!("/channels/{}", c),
@@ -82,7 +84,8 @@ impl Route {
             PinMessage(c, m) => api!("/channels/{}/pins/{}", c, m),
             UnpinMessage(c, m) => api!("/channels/{}/pins/{}", c, m),
 
-            GetMessage(c, m) => api!("/channels/{}/messages/{}", c, m),
+            GetChannelMessages(c) => api!("/channels/{}/messages", c),
+            GetChannelMessage(c, m) => api!("/channels/{}/messages/{}", c, m),
             PostMessage(c) => api!("/channels/{}/messages", c),
             EditMessage(c, m) => api!("/channels/{}/messages/{}", c, m),
             DeleteMessage(c, m) => api!("/channels/{}/messages/{}", c, m),
@@ -104,9 +107,11 @@ impl Route {
             EditGuildCommand(a, g, c) => api!("/applications/{}/guilds/{}/commands/{}", a, g, c),
             DeleteGuildCommand(a, g, c) => api!("/applications/{}/guilds/{}/commands/{}", a, g, c),
             BulkOverwriteGuildCommands(a, g) => api!("/applications/{}/guilds/{}/commands", a, g),
+
             CreateInteractionResponse(i, t) => api!("/interactions/{}/{}/callback", i, t),
-            EditInteractionResponse(a, t) => api!("/webhooks/{}/{}/messages/@original", a, t),
-            DeleteInteractionResponse(a, t) => api!("/webhooks/{}/{}/messages/@original", a, t),
+            GetOriginalInteractionResponse(a, t)
+            | EditInteractionResponse(a, t)
+            | DeleteInteractionResponse(a, t) => api!("/webhooks/{}/{}/messages/@original", a, t),
             CreateFollowupMessage(a, t) => api!("/webhooks/{}/{}", a, t),
             EditFollowupMessage(a, t, m) => api!("/webhooks/{}/{}/messages/{}", a, t, m),
             DeleteFollowupMessage(a, t, m) => api!("/webhooks/{}/{}/messages/{}", a, t, m),
@@ -156,7 +161,7 @@ impl Route {
                 Some(Channel::GuildDirectory(c)) => c.name,
                 Some(Channel::GuildForum(c)) => c.name,
             };
-            format!("{}{}", guild, channel)
+            format!("{guild}{channel}")
         };
         let user = |user: UserId| async move {
             cache.user(user).await.map_or_else(|| user.to_string(), |u| u.username)
@@ -184,14 +189,15 @@ impl Route {
 
         #[allow(clippy::useless_format)]
         match self {
-            GetGateway => String::from("GetGateway"),
+            GetGatewayBot => String::from("GetGateway"),
             ApplicationInfo => String::from("GetApplicationInfo"),
             &GetChannel(c) => format!("GetChannel({})", channel(c).await),
             &TriggerTyping(c) => format!("TriggerTyping({})", channel(c).await),
             &GetPinnedMessages(c) => format!("GetPinnedMessages({})", channel(c).await),
             &PinMessage(c, m) => format!("PinMessage({}, {})", channel(c).await, m),
             &UnpinMessage(c, m) => format!("UnpinMessage({}, {})", channel(c).await, m),
-            &GetMessage(c, m) => format!("GetMessage({}, {})", channel(c).await, m),
+            &GetChannelMessages(c) => format!("GetMessage({})", channel(c).await),
+            &GetChannelMessage(c, m) => format!("GetMessage({}, {})", channel(c).await, m),
             &PostMessage(c) => format!("PostMessage({})", channel(c).await),
             &EditMessage(c, m) => format!("EditMessage({}, {})", channel(c).await, m),
             &DeleteMessage(c, m) => format!("DeleteMessage({}, {})", channel(c).await, m),
@@ -237,11 +243,12 @@ impl Route {
                 guild(g).await
             ),
             CreateInteractionResponse(_, _) => format!("CreateInteractionResponse"),
+            GetOriginalInteractionResponse(_, _) => format!("GetOriginalInteractionResponse"),
             EditInteractionResponse(_, _) => format!("EditInteractionResponse"),
             DeleteInteractionResponse(_, _) => format!("DeleteInteractionResponse"),
             CreateFollowupMessage(_, _) => format!("CreateFollowupMessage"),
-            EditFollowupMessage(_, _, m) => format!("EditFollowupMessage({})", m),
-            DeleteFollowupMessage(_, _, m) => format!("DeleteFollowupMessage({})", m),
+            EditFollowupMessage(_, _, m) => format!("EditFollowupMessage({m})",),
+            DeleteFollowupMessage(_, _, m) => format!("DeleteFollowupMessage({m})",),
             &GetGuildApplicationCommandPermissions(_, g) => format!(
                 "GetGuildApplicationCommandPermissions({})",
                 guild(g).await,
@@ -262,7 +269,10 @@ impl Route {
             ModifyCurrentUser => format!("ModifyCurrentUser"),
             GetCurrentUserGuilds => format!("GetCurrentUserGuilds"),
             CreateDm => format!("CreateDm"),
-            &GetGuildMember(g, u) => format!("GetGuildMember({}, {})", g, u),
+            &GetGuildMember(g, u) => format!(
+                "GetGuildMember({}, {})",
+                guild(g).await, user(u).await
+            ),
             &AddGuildMemberRole(g, u, r) => format!(
                 "AddGuildMemberRole({}, {}, {})",
                 guild(g).await, user(u).await, role(g, r).await

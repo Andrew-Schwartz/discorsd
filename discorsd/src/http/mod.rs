@@ -96,12 +96,12 @@ pub enum DisplayClientError<'a> {
 impl Display for DisplayClientError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Request(e) => write!(f, "error making request: {}", e),
+            Self::Request(e) => write!(f, "error making request: {e}"),
             Self::Http(e) => f.write_str(e),
-            Self::Json(e) => write!(f, "bad json: {}", e),
-            Self::Io(e) => write!(f, "io error: {}", e),
-            Self::Discord(e) => write!(f, "Discord error: {:?}", e),
-            Self::Perms(p) => write!(f, "lacking permissions {:?}", p)
+            Self::Json(e) => write!(f, "bad json: {e}"),
+            Self::Io(e) => write!(f, "io error: {e}"),
+            Self::Discord(e) => write!(f, "Discord error: {e:?}"),
+            Self::Perms(p) => write!(f, "lacking permissions {p:?}"),
         }
     }
 }
@@ -116,7 +116,7 @@ pub type ClientResult<T> = Result<T, ClientError>;
 #[derive(Debug)]
 pub struct DiscordClient {
     pub(crate) token: String,
-    client: Client,
+    pub client: Client,
     rate_limit: Arc<Mutex<RateLimiter>>,
 }
 
@@ -130,7 +130,7 @@ impl DiscordClient {
     /// Create a
     pub(crate) fn shared(token: String, rate_limit: Arc<Mutex<RateLimiter>>) -> Self {
         let mut headers = HeaderMap::new();
-        headers.insert(AUTHORIZATION, format!("Bot {}", token).parse().expect("Unable to parse token!"));
+        headers.insert(AUTHORIZATION, format!("Bot {token}").parse().expect("Unable to parse token!"));
 
         let client = Client::builder()
             .default_headers(headers)
@@ -149,7 +149,7 @@ impl DiscordClient {
         let Request { method, route, query, body, multipart } = request;
         let key = BucketKey::from(&route);
         let async_operation = || async {
-            let mut builder = self.client.request(method.clone(), &route.url());
+            let mut builder = self.client.request(method.clone(), route.url());
             if let Some(query) = &query {
                 builder = builder.query(query);
             }
@@ -175,7 +175,7 @@ impl DiscordClient {
                     backoff::Error::transient(ClientError::Http(status, route.clone()))
                 } else {
                     let permanent = if let Ok(error) = response.nice_json().await {
-                        println!("discord error = {:?}", error);
+                        println!("discord error = {error:?}");
                         ClientError::Discord(error)
                     } else {
                         ClientError::Http(status, route.clone())
@@ -197,7 +197,7 @@ impl DiscordClient {
             async_operation,
             |e: ClientError, dur|
                 if !matches!(e, ClientError::Http(StatusCode::TOO_MANY_REQUESTS, Route::CreateReaction(_, _, _))) {
-                    warn!("Error in request {:?} after {:?}: {}", route, dur, e)
+                    warn!("Error in request {route:?} after {dur:?}: {e}");
                 },
         ).await
     }
@@ -352,8 +352,8 @@ impl DiscordClient {
     /// # Errors
     ///
     /// If the http request fails, or fails to deserialize the response into a `BotGateway`
-    pub async fn gateway(&self) -> ClientResult<BotGateway> {
-        self.get(Route::GetGateway).await
+    pub async fn gateway_bot(&self) -> ClientResult<BotGateway> {
+        self.get(Route::GetGatewayBot).await
     }
 
     /// Gets application information for the bot's application
@@ -372,13 +372,13 @@ impl AsRef<Self> for DiscordClient {
     }
 }
 
-impl<B: Send + Sync> AsRef<DiscordClient> for BotState<B> {
+impl<B> AsRef<DiscordClient> for BotState<B> {
     fn as_ref(&self) -> &DiscordClient {
         &self.client
     }
 }
 
-impl<B: Send + Sync> AsRef<DiscordClient> for Arc<BotState<B>> {
+impl<B> AsRef<DiscordClient> for Arc<BotState<B>> {
     fn as_ref(&self) -> &DiscordClient {
         &self.client
     }
@@ -422,7 +422,7 @@ impl ImageData {
         if let Some(image) = image {
             match tokio::fs::read(path).await {
                 Ok(file) => {
-                    Ok(Self(format!("data:image/{};base64,{}", image, base64::encode(&file))))
+                    Ok(Self(format!("data:image/{};base64,{}", image, base64::encode(file))))
                 }
                 Err(e) => Err(ImageHashError::Io(e)),
             }

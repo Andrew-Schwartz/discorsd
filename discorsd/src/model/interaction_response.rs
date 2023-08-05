@@ -29,7 +29,7 @@ serde_num_tag! { just Serialize =>
         (1) = Pong,
         /// respond to an interaction with a message
         (4) = ChannelMessageWithSource(InteractionMessage),
-        /// ACK an interaction and edit a response later, the user sees a loading state
+        /// ACK an interaction and edit a response later, thse user sees a loading state
         (5) = DeferredChannelMessageWithSource,
         /// for components ONLY, ACK an interaction and edit the original message later; the user
         /// does not see a loading state
@@ -145,7 +145,7 @@ impl InteractionMessage {
     pub fn embed<F: FnOnce(&mut RichEmbed)>(&mut self, builder: F) {
         self.try_embed(builder)
             .map_err(|_| "can't send more than 10 embeds")
-            .unwrap()
+            .unwrap();
     }
 
     /// Add an embed to the [InteractionMessage](InteractionMessage).
@@ -178,19 +178,19 @@ impl InteractionMessage {
     }
 
     pub fn button<B, State, C, F>(&mut self, state: State, command: C, builder: F)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               C: ButtonCommand<Bot=B>,
               F: FnOnce(&mut Button),
     {
         let mut button = make_button(builder);
         state.as_ref().register_button(&mut button, Box::new(command));
-        self.components.push(ActionRow::buttons(vec![button]))
+        self.components.push(ActionRow::buttons(vec![button]));
         // self.buttons(iter::once(button))
     }
 
     pub fn buttons<B, State, I>(&mut self, state: State, buttons: I)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               I: IntoIterator<Item=(Box<dyn ButtonCommand<Bot=B>>, Button)>,
     {
@@ -200,11 +200,11 @@ impl InteractionMessage {
                 button
             })
             .collect();
-        self.components.push(ActionRow::buttons(buttons))
+        self.components.push(ActionRow::buttons(buttons));
     }
 
     pub fn menu<B, State, C, F, D>(&mut self, state: State, command: C, builder: F)
-        where B: Send + Sync + 'static,
+        where B: 'static,
               State: AsRef<BotState<B>>,
               C: MenuCommand<Bot=B, Data=D>,
               D: MenuData,
@@ -216,6 +216,6 @@ impl InteractionMessage {
         menu.options = D::options();
         builder(&mut menu);
         state.as_ref().register_menu(&mut menu, Box::new(command));
-        self.components.push(ActionRow::menu(menu))
+        self.components.push(ActionRow::menu(menu));
     }
 }

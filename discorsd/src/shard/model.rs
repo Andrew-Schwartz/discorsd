@@ -20,7 +20,8 @@ pub(crate) enum Payload {
         event: DispatchPayload,
         seq_num: u64,
     },
-    /// Send/Receive: Fired periodically by the client to keep the connection alive.
+    /// Send/Receive: Fired periodically by the client to keep the connection alive, fired by
+    /// Discord to request another heartbeat be sent
     Heartbeat(Heartbeat),
     /// Send: Starts a new session during the initial handshake.
     Identify(Identify),
@@ -104,7 +105,7 @@ impl<'a> TryFrom<RawPayload<'a>> for Payload {
                 let s = s.unwrap();
                 let t = t.unwrap();
 
-                let json = format!(r#"{{"t":"{}","d":{}}}"#, t, d);
+                let json = format!(r#"{{"t":"{t}","d":{d}}}"#);
 
                 match nice_from_str(&json) {
                     Ok(event) => Ok(Self::Dispatch { event, seq_num: s }),
@@ -133,7 +134,7 @@ impl<'a> TryFrom<RawPayload<'a>> for Payload {
             4 => Err(de::Error::custom("`UpdateVoiceStatus` should not be received")),
             6 => Err(de::Error::custom("`Resume` should not be received")),
             8 => Err(de::Error::custom("`RequestGuildMembers` should not be received")),
-            _ => Err(de::Error::custom(format!("Unrecognized opcode {}", op))),
+            _ => Err(de::Error::custom(format!("Unrecognized opcode {op}"))),
         }
     }
 }
@@ -206,23 +207,27 @@ impl Identify {
     }
 
     /// Set the bot's precence when initially connecting.
+    #[must_use]
     pub fn presence(mut self, presence: UpdateStatus) -> Self {
         self.presence = Some(presence);
         self
     }
 
     /// Override the default intents (all non-privileged intents).
+    #[must_use]
     pub const fn set_intents(mut self, intents: Intents) -> Self {
         self.intents = intents;
         self
     }
 
     /// Add intents to the default
+    #[must_use]
     pub fn add_intents(mut self, intents: Intents) -> Self {
         self.intents |= intents;
         self
     }
 
+    #[must_use]
     pub fn remove_intents(mut self, intents: Intents) -> Self {
         self.intents ^= intents;
         self
@@ -367,16 +372,19 @@ impl RequestGuildMembers {
         }
     }
 
+    #[must_use]
     pub const fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(limit);
         self
     }
 
+    #[must_use]
     pub const fn presences(mut self, presences: bool) -> Self {
         self.presences = presences;
         self
     }
 
+    #[must_use]
     pub fn nonce(mut self, nonce: impl Into<String>) -> Self {
         self.nonce = Some(nonce.into());
         self

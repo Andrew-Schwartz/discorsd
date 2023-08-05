@@ -107,7 +107,7 @@ impl Command {
         Self::SlashCommand {
             name: name.into(),
             name_localizations: Default::default(),
-            description: description.into(),
+            description,
             description_localizations: Default::default(),
             options,
         }
@@ -254,14 +254,14 @@ impl<T: OptionType> OptionData<T> {
               SCR: SlashCommandRaw,
     {
         let choices = choices.into_iter()
-            .map(|c| c.into_command_choice())
+            .map(CommandData::into_command_choice)
             .collect();
         //             &mut StringData       Vec<Choice<String>>
-        T::set_choices(&mut self.extra_data, choices)
+        T::set_choices(&mut self.extra_data, choices);
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Choice<T> {
     /// 1-32 character name
     pub name: Cow<'static, str>,
@@ -278,8 +278,7 @@ impl<T> Choice<T> {
         let nlen = name.chars().count();
         assert!(
             (1..=100).contains(&nlen),
-            "command names must be 1-100 characters, name = {:?}",
-            name
+            "command names must be 1-100 characters, name = {name:?}",
         );
 
         Self { name, name_localizations: Default::default(), value }
@@ -302,7 +301,7 @@ pub struct SubCommand {
     pub data_options: Vec<CommandDataOption>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct StringData {
     /// If the parameter is required or optional--default false
     #[serde(default)]
@@ -321,7 +320,7 @@ pub struct StringData {
     pub autocomplete: Option<bool>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct NumericData<T> {
     /// If the parameter is required or optional--default false
     #[serde(default)]
@@ -340,7 +339,7 @@ pub struct NumericData<T> {
     pub autocomplete: Option<bool>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct ChannelData {
     /// If the parameter is required or optional--default false
     #[serde(default)]
@@ -350,7 +349,7 @@ pub struct ChannelData {
     pub choices: Vec<ChannelType>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct ParameterData {
     /// If the parameter is required or optional--default false
     #[serde(default)]
@@ -374,15 +373,6 @@ macro_rules! data_type {
         )+
     };
 }
-
-// impl OptionType for String {
-//     type Data = StringData;
-//     type Choice = String;
-//
-//     fn set_choices(data: &mut Self::Data, choices: Vec<Choice<Self::Choice>>) {
-//         data.choices = choices;
-//     }
-// }
 
 data_type! {
     SubCommand => SubCommand, std::convert::Infallible, _d, _c, { unreachable!() };

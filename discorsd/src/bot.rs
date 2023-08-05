@@ -22,22 +22,22 @@ use once_cell::sync::OnceCell;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::cache::Cache;
-use crate::commands::{ButtonCommand, MenuCommandRaw, ReactionCommand, SlashCommand, SlashCommandRaw, UserCommand, MessageCommand};
+use crate::commands::{ButtonCommand, MenuCommandRaw, MessageCommand, ReactionCommand, SlashCommand, SlashCommandRaw, UserCommand};
 use crate::errors::BotError;
 use crate::http::{ClientResult, DiscordClient};
-use crate::model::commands::{InteractionUse, AppCommandData};
+use crate::model::commands::{AppCommandData, InteractionUse};
 use crate::model::components::{Button, ComponentId, Menu, SelectMenuType};
 use crate::model::guild::{Guild, Integration};
 use crate::model::ids::*;
-use crate::model::message::Message;
 use crate::model::interaction;
 use crate::model::interaction::{ApplicationCommandData, MessageComponentData};
+use crate::model::message::Message;
 use crate::model::permissions::Role;
 use crate::model::user::User;
 use crate::shard;
+use crate::shard::{Shard, WsStream};
 use crate::shard::dispatch::{MessageUpdate, ReactionUpdate};
 use crate::shard::model::Identify;
-use crate::shard::Shard;
 
 /// Maps `GuildId` to a `RwLock<V>`.
 pub type GuildIdMap<V> = HashMap<GuildId, RwLock<V>>;
@@ -45,9 +45,11 @@ pub type GuildIdMap<V> = HashMap<GuildId, RwLock<V>>;
 pub type GuildCommands<B> = HashMap<CommandId, Box<dyn SlashCommandRaw<Bot=B>>>;
 
 /// Stores the state of your Bot.
-pub struct BotState<B: Send + Sync + 'static> {
+pub struct BotState<B: 'static> {
     /// The client, including your bot's token.
     pub client: DiscordClient,
+    /// The websocket connection
+    pub(crate) stream: RwLock<Option<WsStream>>,
     /// All information received in events.
     /// Also updated by `BotState::cache_SOMETHING`, which is otherwise the same as
     /// `DiscordClient::get_SOMETHING`.
@@ -80,7 +82,7 @@ pub struct BotState<B: Send + Sync + 'static> {
     pub count: AtomicUsize,
 }
 
-impl<B: Send + Sync + 'static> BotState<B> {
+impl<B> BotState<B> {
     fn create_id(&self) -> ComponentId {
         let id = self.count.fetch_add(1, Ordering::Relaxed);
         id.to_string().into()
@@ -97,12 +99,18 @@ impl<B: Send + Sync + 'static> BotState<B> {
         menu.custom_id = id.clone();
         self.menus.write().unwrap().insert(id, command);
     }
+}
 
-    pub async fn register_guild_commands<G: Id<Id=GuildId>, I: IntoIterator<Item=Box<dyn SlashCommandRaw<Bot=B>>>>(
+impl<B: Send + Sync> BotState<B> {
+    pub async fn register_guild_commands<G, I>(
         &self,
         guild: G,
         commands: I,
-    ) -> ClientResult<()> {
+    ) -> ClientResult<()>
+        where G: Id<Id=GuildId> + Send,
+              I: IntoIterator<Item=Box<dyn SlashCommandRaw<Bot=B>>> + Send,
+              <I as IntoIterator>::IntoIter: Send
+    {
         let guild = guild.id();
         for command in commands {
             let application_command = self.client.create_guild_command(
@@ -130,35 +138,13 @@ impl<B: Send + Sync + 'static> BotState<B> {
     }
 }
 
-impl<B: Send + Sync> AsRef<Self> for BotState<B> {
+impl<B> AsRef<Self> for BotState<B> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
 
 impl<B: Send + Sync> BotState<B> {
-    // todo
-    // #[cfg(test)]
-    pub fn testing_state(bot: B) -> Arc<Self> {
-        Arc::new(Self {
-            client: DiscordClient::single(String::new()),
-            cache: Default::default(),
-            bot,
-            commands: Default::default(),
-            command_names: Default::default(),
-            global_commands: Default::default(),
-            global_user_commands: Default::default(),
-            global_message_commands: Default::default(),
-            global_command_names: Default::default(),
-            global_user_command_names: Default::default(),
-            global_message_command_names: Default::default(),
-            reaction_commands: Default::default(),
-            buttons: Default::default(),
-            menus: Default::default(),
-            count: Default::default(),
-        })
-    }
-
     /// Gets the current [`User`](User).
     ///
     /// # Panics
@@ -208,7 +194,7 @@ impl<B: Send + Sync> BotState<B> {
     pub async fn command_id<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> CommandId {
         *self.command_names.read().await
             .get(&guild)
-            .unwrap_or_else(|| panic!("Guild {} exists", guild))
+            .unwrap_or_else(|| panic!("Guild {guild} exists"))
             .read().await
             .get(C::NAME)
             .unwrap_or_else(|| panic!("{} exists", C::NAME))
@@ -225,7 +211,7 @@ impl<B: Send + Sync> BotState<B> {
     ///
     /// Panics if the bot has not received the [Ready](crate::shard::dispatch::Ready) event yet, or if the
     /// command `C` does not exist is not a global command.
-    pub async fn global_command_id<C: SlashCommand<Bot=B>>(&self) -> CommandId {
+    pub fn global_command_id<C: SlashCommand<Bot=B>>(&self) -> CommandId {
         *self.global_command_names.get()
             .expect("Bot hasn't connected yet")
             .get(C::NAME)
@@ -284,7 +270,7 @@ impl<B: Send + Sync> BotState<B> {
     }
 }
 
-impl<B: Debug + Send + Sync> Debug for BotState<B> {
+impl<B: Debug> Debug for BotState<B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("BotState")
             .field("client", &self.client)
@@ -390,6 +376,7 @@ pub trait BotExt: Bot + 'static {
 
     /// Respond to an interaction with the matching [SlashCommand]. Should likely be used in the
     /// [Bot::interaction](Bot::interaction) method.
+    #[allow(clippy::too_many_lines)]
     async fn handle_interaction(interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
         match interaction {
             interaction::Interaction::Ping => println!("PING!"),
@@ -429,7 +416,7 @@ pub trait BotExt: Bot + 'static {
                                 command.run(Arc::clone(&state), interaction, options).await?;
                             }
                         }
-                    },
+                    }
                     ApplicationCommandData::UserCommand { id, name, target_id, resolved } => {
                         let global_user_command = state.global_user_commands.get().unwrap().get(&id);
                         if let Some(command) = global_user_command {
@@ -448,7 +435,7 @@ pub trait BotExt: Bot + 'static {
                                 command.run(Arc::clone(&state), interaction, u.clone(), guild_member.cloned()).await?;
                             }
                         }
-                    },
+                    }
                     ApplicationCommandData::MessageCommand { id, name, target_id, resolved } => {
                         let global_message_command = state.global_message_commands.get().unwrap().get(&id);
                         if let Some(command) = global_message_command {
@@ -466,7 +453,7 @@ pub trait BotExt: Bot + 'static {
                                 command.run(Arc::clone(&state), interaction, m.clone()).await?;
                             }
                         }
-                    },
+                    }
                 }
             }
             interaction::Interaction::MessageComponent(data) => {
@@ -535,6 +522,7 @@ impl<B: Bot + 'static> From<B> for BotRunner<B> {
     fn from(bot: B) -> Self {
         let state = Arc::new(BotState {
             client: DiscordClient::single(bot.token()),
+            stream: Default::default(),
             cache: Default::default(),
             bot,
             commands: Default::default(),

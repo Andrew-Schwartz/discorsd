@@ -3,7 +3,7 @@ use proc_macro_error::abort;
 use quote::{quote, quote_spanned};
 use syn::{Attribute, DataEnum, Ident, LitStr};
 
-pub fn menu_impl(ty: &Ident, data: DataEnum, attrs: Vec<Attribute>) -> TokenStream2 {
+pub fn menu_impl(ty: &Ident, data: DataEnum, attrs: &[Attribute]) -> TokenStream2 {
     let mut enm = Enum { skip_display: false };
     attrs.iter()
         .filter(|a| a.path.is_ident("menu"))

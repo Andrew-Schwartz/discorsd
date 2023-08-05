@@ -63,7 +63,7 @@ impl DiscordClient {
 // todo more of these (only getters, since other ones trigger events), also document this in the
 //  mod level docs
 /// Guild related caching http requests
-impl<B: Send + Sync + 'static> BotState<B> {
+impl<B: Send + Sync> BotState<B> {
     /// Fetches the relevant guild member with Discord's API, then cache the result for future
     /// reference before returning it.
     pub async fn cache_guild_member(&self, guild: GuildId, user: UserId) -> ClientResult<GuildMember> {

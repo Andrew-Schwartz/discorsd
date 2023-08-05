@@ -11,7 +11,7 @@ pub use crate::model::ids::{EmojiId, RoleId};
 use crate::model::user::User;
 use crate::serde_utils::BoolExt;
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Emoji {
     Custom(CustomEmoji),
@@ -65,7 +65,7 @@ impl fmt::Display for Emoji {
 }
 
 /// Represents an emoji as shown in the Discord client.
-#[derive(Deserialize, Serialize, Debug, Clone, Eq, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct CustomEmoji {
     /// emoji id
     pub id: EmojiId,
@@ -96,7 +96,14 @@ pub struct CustomEmoji {
     #[serde(default)]
     pub available: bool,
 }
-id_impl!(CustomEmoji => EmojiId);
+
+impl Id for CustomEmoji {
+    type Id = EmojiId;
+
+    fn id(&self) -> Self::Id {
+        self.id
+    }
+}
 
 impl fmt::Display for CustomEmoji {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

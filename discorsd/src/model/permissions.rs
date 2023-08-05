@@ -177,6 +177,8 @@ bitflags! {
         /// Allows sending voice messages
         /// T, V, S
         const SEND_VOICE_MESSAGES = 1 << 46;
+        /// Undocumented
+        const UNKNOWN_47 = 1 << 47;
     }
 }
 
@@ -203,7 +205,7 @@ impl Permissions {
         if guild.owner { return Self::all(); }
 
         let permissions = member.roles.iter()
-            .flat_map(|role| guild.roles.get(role))
+            .filter_map(|role| guild.roles.get(role))
             .fold(everyone.permissions, |perms, role_perms| perms | role_perms.permissions);
         if permissions.contains(Self::ADMINISTRATOR) {
             Self::all()
@@ -233,7 +235,7 @@ impl Permissions {
 
             // Apply role specific overwrites.
             let (allow, deny) = member.roles.iter()
-                .flat_map(|id| role_overwrites.get(id))
+                .filter_map(|id| role_overwrites.get(id))
                 .fold(
                     (Self::empty(), Self::empty()),
                     |(allow, deny), &(overwrite_allow, overwrite_deny)| (allow | overwrite_allow, deny | overwrite_deny),
@@ -259,9 +261,9 @@ impl<'de> Deserialize<'de> for Permissions {
         impl PermsVisitor {
             fn get_perms<E: Error>(s: &str) -> Result<Permissions, E> {
                 let bits = s.parse()
-                    .map_err(|e| E::custom(format!("Unable to parse bits as u64: {}", e)))?;
+                    .map_err(|e| E::custom(format!("Unable to parse bits as u64: {e}")))?;
                 Permissions::from_bits(bits)
-                    .ok_or_else(|| E::custom(format!("Unexpected `Permissions` bitflag value {}", bits)))
+                    .ok_or_else(|| E::custom(format!("Unexpected `Permissions` bitflag value {bits}")))
             }
         }
         impl<'de> Visitor<'de> for PermsVisitor {

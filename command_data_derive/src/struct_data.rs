@@ -103,8 +103,8 @@ impl FieldIdent {
 
     fn ident(&self) -> TokenStream2 {
         match self {
-            FieldIdent::Named(NamedField { ident, .. }) => quote! { #ident },
-            FieldIdent::Unnamed(UnnamedField { index }) => quote! { #index },
+            Self::Named(NamedField { ident, .. }) => quote! { #ident },
+            Self::Unnamed(UnnamedField { index }) => quote! { #index },
         }
     }
 }
@@ -154,8 +154,8 @@ pub enum VarargNum {
 impl VarargNum {
     fn take_n(&self) -> TokenStream2 {
         match self {
-            VarargNum::Count(n) => quote! { #n },
-            VarargNum::Function(path) => quote! { #path(command) },
+            Self::Count(n) => quote! { #n },
+            Self::Function(path) => quote! { #path(command) },
         }
     }
 }
@@ -227,17 +227,17 @@ impl VarargNames {
 
     fn names(&self) -> TokenStream2 {
         match self {
-            VarargNames::Index(root) => quote! {
+            Self::Index(root) => quote! {
                 (1..).map(|i| format!(concat!(#root, "{}"), i))
             },
-            VarargNames::Ordinals => {
+            Self::Ordinals => {
                 let ordinals = Self::ordinals_array();
                 quote! {
                     // ::std::array::IntoIter::new(#ordinals)
                     #ordinals.into_iter()
                 }
             }
-            VarargNames::Function(fun) => quote! {
+            Self::Function(fun) => quote! {
                 (1..).map(|i| #fun(i))
             },
         }
@@ -247,18 +247,18 @@ impl VarargNames {
     /// Called as the body of a closure with parameters `option_name: &str` and `idx: usize`, returns `bool`
     fn matches_vararg(&self) -> TokenStream2 {
         match self {
-            VarargNames::Index(root) => quote! {
+            Self::Index(root) => quote! {
                 option_name.strip_prefix(#root)
                     .and_then(|num| num.parse::<usize>().ok())
                     == Some(idx)
             },
-            VarargNames::Ordinals => {
+            Self::Ordinals => {
                 let ordinals = Self::ordinals_array();
                 quote! {
                     #ordinals[idx - 1] == option_name
                 }
             }
-            VarargNames::Function(fun) => quote! {
+            Self::Function(fun) => quote! {
                 #fun(idx) == option_name
             },
         }
@@ -476,7 +476,7 @@ impl Struct {
             .map(|seq| seq.ident.to_string())
             .collect();
         // todo span these to the declaration of the struct
-        let builder_ident = Ident::new(&format!("{}Builder", builder_prefix), Span::call_site());
+        let builder_ident = Ident::new(&format!("{builder_prefix}Builder"), Span::call_site());
         let option_ctor_generic_bound = std::iter::once(quote! { ::discorsd::commands::OptionCtor });
         let bounded_generics = declaration_generics(&self.generics, option_ctor_generic_bound);
         let use_generics = use_generics(&self.generics);

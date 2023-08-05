@@ -8,10 +8,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::time::{Duration, Instant};
 
 use crate::{BotState, utils};
-use crate::cache::Cache;
 use crate::commands::SlashCommandRaw;
 use crate::errors::*;
 use crate::http::{ClientResult, DiscordClient};
@@ -25,18 +23,18 @@ use crate::model::interaction_response::{InteractionMessage, InteractionResponse
 use crate::model::message::{Attachment, Message};
 use crate::model::user::User;
 
-pub trait Usability: PartialEq {}
+pub trait Usability: PartialEq + Send + Sync {}
 
 pub trait NotUnused: Usability {}
 
 #[allow(clippy::empty_enum)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Unused {}
 
 impl Usability for Unused {}
 
 #[allow(clippy::empty_enum)]
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Deferred {}
 
 impl Usability for Deferred {}
@@ -44,17 +42,17 @@ impl Usability for Deferred {}
 impl NotUnused for Deferred {}
 
 #[allow(clippy::empty_enum)]
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Used {}
 
 impl Usability for Used {}
 
 impl NotUnused for Used {}
 
-pub trait InteractionPayload {}
+pub trait InteractionPayload: Send + Sync {}
 
 // todo rename AppCommandData, ApplicationCommandData, ApplicationCommand
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppCommandData {
     /// the id of the command being invoked
     pub command: CommandId,
@@ -64,7 +62,7 @@ pub struct AppCommandData {
 
 impl InteractionPayload for AppCommandData {}
 
-pub trait ComponentData {}
+pub trait ComponentData: Send + Sync {}
 
 impl<C: ComponentData> InteractionPayload for C {}
 
@@ -78,21 +76,21 @@ impl ComponentData for ComponentId {}
 
 #[async_trait]
 pub trait FinalizeInteraction<Data: InteractionPayload> {
-    async fn finalize<B: Send + Sync + 'static>(self, state: &Arc<BotState<B>>) -> ClientResult<InteractionUse<Data, Used>>;
+    async fn finalize<B: Send + Sync>(self, state: &Arc<BotState<B>>) -> ClientResult<InteractionUse<Data, Used>>;
 }
 
 #[allow(clippy::use_self)]
 #[async_trait]
-impl<Data: InteractionPayload + Send> FinalizeInteraction<Data> for InteractionUse<Data, Used> {
-    async fn finalize<B: Send + Sync + 'static>(self, _: &Arc<BotState<B>>) -> ClientResult<InteractionUse<Data, Used>> {
+impl<Data: InteractionPayload> FinalizeInteraction<Data> for InteractionUse<Data, Used> {
+    async fn finalize<B: Send + Sync>(self, _: &Arc<BotState<B>>) -> ClientResult<InteractionUse<Data, Used>> {
         Ok(self)
     }
 }
 
 #[allow(clippy::use_self)]
 #[async_trait]
-impl<Data: InteractionPayload + Send> FinalizeInteraction<Data> for InteractionUse<Data, Deferred> {
-    async fn finalize<B: Send + Sync + 'static>(self, state: &Arc<BotState<B>>) -> ClientResult<InteractionUse<Data, Used>> {
+impl<Data: InteractionPayload> FinalizeInteraction<Data> for InteractionUse<Data, Deferred> {
+    async fn finalize<B: Send + Sync>(self, state: &Arc<BotState<B>>) -> ClientResult<InteractionUse<Data, Used>> {
         self.delete(state).await
     }
 }
@@ -194,7 +192,7 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
     }
 
     pub async fn delete<B, State>(self, state: State) -> ClientResult<InteractionUse<Data, Used>>
-        where B: Send + Sync + 'static,
+        where B: 'static + Send + Sync,
               State: AsRef<BotState<B>> + Send,
     {
         let client = state.as_ref();
@@ -204,89 +202,61 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
 
 impl<Data: InteractionPayload> InteractionUse<Data, Used> {
     pub async fn edit<B, State, Message>(&mut self, state: State, message: Message) -> ClientResult<()>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync,
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
               Message: Into<InteractionMessage> + Send,
     {
-        let state = state.as_ref();
-        state.client.edit_interaction_response(
-            state.application_id(),
-            self.token.clone(),
-            message.into(),
-        ).await?;
+        self.token.edit(state, message).await?;
         Ok(())
     }
 
     #[allow(dead_code)]
     pub async fn delete<B, State>(self, state: State) -> ClientResult<()>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send
     {
-        let state = state.as_ref();
-        state.client.delete_interaction_response(
-            state.application_id(),
-            self.token,
-        ).await
+        self.token.delete(state).await
     }
 
     pub async fn followup<B, State, Message>(&self, state: State, message: Message) -> ClientResult<crate::model::message::Message>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync,
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
               Message: Into<WebhookMessage> + Send,
     {
-        let state = state.as_ref();
-        state.client.create_followup_message(
-            state.application_id(),
-            self.token.clone(),
-            message.into(),
-        ).await
+        self.token.followup(state, message).await
     }
 }
 
 #[allow(clippy::use_self)]
 impl<Data: InteractionPayload> InteractionUse<Data, Deferred> {
     pub async fn followup<B, State, Message>(&self, state: State, message: Message) -> ClientResult<crate::model::message::Message>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync,
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
               Message: Into<WebhookMessage> + Send,
     {
-        let state = state.as_ref();
-        state.client.create_followup_message(
-            state.application_id(),
-            self.token.clone(),
-            message.into(),
-        ).await
+        self.token.followup(state, message).await
     }
 
     pub async fn edit<B, State, Message>(self, state: State, message: Message) -> ClientResult<InteractionUse<Data, Used>>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync,
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
               Message: Into<InteractionMessage> + Send,
     {
-        let state = state.as_ref();
-        state.client.edit_interaction_response(
-            state.application_id(),
-            self.token.clone(),
-            message.into(),
-        ).await?;
+        self.token.edit(state, message).await?;
         Ok(self.into())
     }
 
     pub async fn delete<B, State>(self, state: State) -> ClientResult<InteractionUse<Data, Used>>
-        where B: Send + Sync + 'static,
-              State: AsRef<BotState<B>> + Send + Sync
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send,
     {
-        let state = state.as_ref();
-        state.client.delete_interaction_response(
-            state.application_id(),
-            self.token.clone(),
-        ).await?;
+        self.token.delete(state).await?;
         Ok(self.into())
     }
 }
 
-impl<C: ComponentData, U: Usability> InteractionUse<C, U>
-    where InteractionUse<C, Used>: From<InteractionUse<C, U>>,
+impl<C: ComponentData + Send, U: Usability + Send> InteractionUse<C, U>
+    where InteractionUse<C, Used>: From<Self>,
 {
     pub async fn update<Client, Message>(self, client: Client, message: Message) -> ClientResult<InteractionUse<C, Used>>
         where Client: AsRef<DiscordClient> + Send,
@@ -312,25 +282,19 @@ impl<C: ComponentData, U: Usability> InteractionUse<C, U>
     }
 }
 
-impl<Data: InteractionPayload + Sync, U: NotUnused + Sync> InteractionUse<Data, U> {
-    pub async fn get_message(
-        &self,
-        cache: &Cache,
-        period: Duration,
-        timeout: Duration,
-    ) -> Option<Message> {
-        let start = Instant::now();
-        let mut interval = tokio::time::interval(period);
-        loop {
-            let now = interval.tick().await;
-            if let Some(message) = cache.interaction_response(self).await {
-                println!("DONE: {:?}", now - start);
-                break Some(message);
-            }
-            log::info!("MISSED ONE = {:?}", now - start);
-            if now - start > timeout {
-                break None;
-            }
+impl<Data: InteractionPayload, U: NotUnused> InteractionUse<Data, U> {
+    pub async fn get_message<B, State>(&self, state: State) -> ClientResult<Message>
+        where B: 'static + Send + Sync,
+              State: AsRef<BotState<B>> + Send
+    {
+        let state = state.as_ref();
+        if let Some(message) = state.cache.interaction_response(self).await {
+            Ok(message)
+        } else {
+            state.client.get_original_interaction_response(
+                state.application_id(),
+                self.token.clone()
+            ).await
         }
     }
 }
@@ -680,6 +644,7 @@ pub trait OptionsLadder: Sized {
     type Raise: OptionsLadder;
     type Lower: OptionsLadder;
 
+    #[allow(clippy::result_large_err)]
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError>;
 }
 
@@ -756,7 +721,7 @@ impl OptionsLadder for Vec<InteractionDataOption> {
 }
 
 impl OptionsLadder for InteractionDataOption {
-    type Raise = Vec<InteractionDataOption>;
+    type Raise = Vec<Self>;
     type Lower = Lowest;
 
     fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
@@ -814,6 +779,7 @@ impl VarargState {
 pub trait CommandData<Command: SlashCommandRaw>: Sized {
     type Options: OptionsLadder + Send;
     /// function to go from (the options in a) `InteractionData` -> Self
+    #[allow(clippy::result_large_err)]
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError>;
 
     type VecArg: VecArgLadder;
