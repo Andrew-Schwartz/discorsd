@@ -66,12 +66,6 @@ pub struct BotState<B: 'static> {
     pub global_user_commands: OnceCell<HashMap<CommandId, &'static dyn UserCommand<Bot=B>>>,
     /// The global [`MessageCommand`](MessageCommand)s your bot has created.
     pub global_message_commands: OnceCell<HashMap<CommandId, &'static dyn MessageCommand<Bot=B>>>,
-    /// The global [`SlashCommand`](SlashCommand) ids your bot has created, by name.
-    pub global_command_names: OnceCell<HashMap<&'static str, CommandId>>,
-    /// The global [`UserCommand`](UserCommand) ids your bot has created, by name.
-    pub global_user_command_names: OnceCell<HashMap<&'static str, CommandId>>,
-    /// The global [`MessageCommand`](MessageCommand) ids your bot has created, by name.
-    pub global_message_command_names: OnceCell<HashMap<&'static str, CommandId>>,
     /// The [`ReactionCommand`](ReactionCommand)s your bot is using.
     pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
     pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
@@ -200,25 +194,6 @@ impl<B: Send + Sync> BotState<B> {
             .unwrap_or_else(|| panic!("{} exists", C::NAME))
     }
 
-    /// Get the id of the global command `C`.
-    ///
-    /// # Note
-    ///
-    /// Locks [BotState::global_command_names](BotState::global_command_names) in read mode, meaning
-    /// this can cause deadlocks if called while a write guard is held.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the bot has not received the [Ready](crate::shard::dispatch::Ready) event yet, or if the
-    /// command `C` does not exist is not a global command.
-    pub fn global_command_id<C: SlashCommand<Bot=B>>(&self) -> CommandId {
-        *self.global_command_names.get()
-            .expect("Bot hasn't connected yet")
-            .get(C::NAME)
-            .unwrap_or_else(|| panic!("{} exists", C::NAME))
-    }
-    // todo are global_user_command_id and global_message_command_id needed?
-
     // bots can't use these
     // /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
     // /// for command `C` in this `guild`, meaning that everyone in the guild will be able to use it.
@@ -335,7 +310,8 @@ pub trait Bot: Send + Sync + Sized {
     fn global_commands() -> &'static [&'static dyn SlashCommandRaw<Bot=Self>] { &[] }
 
     fn global_user_commands() -> &'static [&'static dyn UserCommand<Bot=Self>] { &[] }
-    // todo add global_message_commands() and add shard\mod.rs global user and message commands
+
+    fn global_message_commands() -> &'static [&'static dyn MessageCommand<Bot=Self>] { &[] }
 
     fn guild_commands() -> Vec<Box<dyn SlashCommandRaw<Bot=Self>>> { Vec::new() }
 
@@ -530,9 +506,6 @@ impl<B: Bot + 'static> From<B> for BotRunner<B> {
             global_commands: Default::default(),
             global_user_commands: Default::default(),
             global_message_commands: Default::default(),
-            global_command_names: Default::default(),
-            global_user_command_names: Default::default(),
-            global_message_command_names: Default::default(),
             reaction_commands: Default::default(),
             buttons: Default::default(),
             menus: Default::default(),

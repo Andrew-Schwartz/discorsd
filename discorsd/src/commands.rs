@@ -283,6 +283,12 @@ pub trait UserCommand: Send + Sync + DynClone + Downcast {
     // todo update name()?
     fn name(&self) -> &'static str;
 
+    fn command(&self) -> Command {
+        Command::user_command(
+            Self::name(&self)
+        )
+    }
+
     // todo add default_permissions()?
 
     async fn run(&self,
@@ -309,6 +315,12 @@ pub trait MessageCommand: Send + Sync + DynClone + Downcast {
 
     // todo update name()?
     fn name(&self) -> &'static str;
+
+    fn command(&self) -> Command {
+        Command::message_command(
+            Self::name(&self)
+        )
+    }
 
     // todo add default_permissions()?
 

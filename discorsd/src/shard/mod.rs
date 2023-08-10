@@ -12,6 +12,7 @@ use async_tungstenite::{
     WebSocketStream,
 };
 use futures::{SinkExt, TryStreamExt};
+use itertools::Itertools;
 use log::{error, info, warn};
 use rand::Rng;
 use thiserror::Error;
@@ -27,6 +28,7 @@ use crate::cache::Update;
 use crate::commands::SlashCommandRaw;
 use crate::http::ClientError;
 use crate::macros::API_VERSION;
+use crate::model::command::Command;
 use crate::model::ids::{CommandId, Id};
 use crate::shard::model::Heartbeat;
 
@@ -415,26 +417,52 @@ impl<B: Bot + 'static> Shard<B> {
             let resume = gateway_params(&ready.resume_gateway_url);
             self.resume_gateway = Some(resume);
 
-            // todo add user and message commands
+            // todo where would type signatures be helpful?
             if self.state.global_commands.get().is_none() {
                 let app = ready.application.id;
                 let client = &self.state.client;
-                let global_commands = B::global_commands();
-                let commands: HashMap<CommandId, &'static dyn SlashCommandRaw<Bot=B>> = client
+
+                let global_slash_commands = B::global_commands();
+                let global_user_commands = B::global_user_commands();
+                let global_message_commands = B::global_message_commands();
+                let slash_index = global_slash_commands.len();
+                let user_index = slash_index + global_user_commands.len();
+                let message_index = user_index + global_message_commands.len();
+                //println!("counts: {},{},{}", global_slash_commands.len(), global_user_commands.len(), global_message_commands.len());
+                //println!("indices: {},{},{}", slash_index, user_index, message_index);
+                let global_commands = global_slash_commands
+                    .iter().map(|c| c.command())
+                    .chain(global_user_commands.iter().map(|c| c.command()))
+                    .chain(global_message_commands.iter().map(|c| c.command()))
+                    .collect();
+                //println!("total: {}", global_commands.len());
+                let commands = client
                     .bulk_overwrite_global_commands(
                         app,
-                        global_commands.iter().map(|c| c.command()).collect(),
+                        global_commands,
                     ).await
-                    .unwrap()
+                    .unwrap();
+                //println!("total after: {}", commands.len());
+                // todo is code repetition avoidable?
+                let slash_commands = (&commands[0..slash_index])
                     .into_iter()
-                    .zip(global_commands)
+                    .zip(global_slash_commands)
                     .map(|(ac, c)| (ac.id, *c))
                     .collect();
-                let command_names = commands.iter()
-                    .map(|(&id, command)| (command.name(), id))
+                let user_commands = (&commands[slash_index..user_index])
+                    .into_iter()
+                    .zip(global_user_commands)
+                    .map(|(ac, c)| (ac.id, *c))
                     .collect();
-                let _result = self.state.global_commands.set(commands);
-                let _result = self.state.global_command_names.set(command_names);
+                let message_commands = (&commands[user_index..message_index])
+                    .into_iter()
+                    .zip(global_message_commands)
+                    .map(|(ac, c)| (ac.id, *c))
+                    .collect();
+                //println!("counts: {},{},{}", (&commands[0..slash_index]).len(), (&commands[slash_index..user_index]).len(), (&commands[user_index..message_index]).len());
+                let _result = self.state.global_commands.set(slash_commands);
+                let _result = self.state.global_user_commands.set(user_commands);
+                let _result = self.state.global_message_commands.set(message_commands);
             }
         }
         let state = Arc::clone(&self.state);
