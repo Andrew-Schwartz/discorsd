@@ -428,22 +428,19 @@ impl<B: Bot + 'static> Shard<B> {
                 let slash_index = global_slash_commands.len();
                 let user_index = slash_index + global_user_commands.len();
                 let message_index = user_index + global_message_commands.len();
-                //println!("counts: {},{},{}", global_slash_commands.len(), global_user_commands.len(), global_message_commands.len());
-                //println!("indices: {},{},{}", slash_index, user_index, message_index);
                 let global_commands = global_slash_commands
                     .iter().map(|c| c.command())
                     .chain(global_user_commands.iter().map(|c| c.command()))
                     .chain(global_message_commands.iter().map(|c| c.command()))
                     .collect();
-                //println!("total: {}", global_commands.len());
                 let commands = client
                     .bulk_overwrite_global_commands(
                         app,
                         global_commands,
                     ).await
                     .unwrap();
-                //println!("total after: {}", commands.len());
                 // todo is code repetition avoidable?
+                // todo is there a rustier way to get vector slices?
                 let slash_commands = (&commands[0..slash_index])
                     .into_iter()
                     .zip(global_slash_commands)
@@ -459,7 +456,6 @@ impl<B: Bot + 'static> Shard<B> {
                     .zip(global_message_commands)
                     .map(|(ac, c)| (ac.id, *c))
                     .collect();
-                //println!("counts: {},{},{}", (&commands[0..slash_index]).len(), (&commands[slash_index..user_index]).len(), (&commands[user_index..message_index]).len());
                 let _result = self.state.global_commands.set(slash_commands);
                 let _result = self.state.global_user_commands.set(user_commands);
                 let _result = self.state.global_message_commands.set(message_commands);

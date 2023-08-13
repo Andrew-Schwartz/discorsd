@@ -19,7 +19,7 @@ use crate::model::ids::{CommandId, GuildId};
 use crate::model::interaction_response::ephemeral;
 use crate::model::command;
 use crate::model::command::{ApplicationCommand, Command};
-use crate::model::interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw, PartialGuildMember};
+use crate::model::interaction::{ButtonPressData, InteractionOption, MenuSelectData, MenuSelectDataRaw, ModalSubmitData, PartialGuildMember};
 use crate::model::message::Message;
 use crate::model::user::User;
 use crate::shard::dispatch::ReactionUpdate;
@@ -421,5 +421,22 @@ impl<M: MenuCommand> MenuCommandRaw for M
             .map(Result::unwrap)
             .collect();
         M::run(self, state, interaction, data).await
+    }
+}
+
+#[async_trait]
+pub trait ModalCommand: Send + Sync + DynClone + Downcast {
+    type Bot: Send + Sync;
+
+    async fn run(&self,
+                 state: Arc<BotState<Self::Bot>>,
+                 interaction: InteractionUse<ModalSubmitData, Unused>,
+    ) -> Result<InteractionUse<ModalSubmitData, Used>, BotError>;
+}
+
+impl_downcast!(ModalCommand assoc Bot);
+impl<'clone, B> Clone for Box<dyn ModalCommand<Bot=B> + 'clone> {
+    fn clone(&self) -> Self {
+        dyn_clone::clone_box(&**self)
     }
 }

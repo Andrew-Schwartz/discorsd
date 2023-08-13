@@ -6,9 +6,9 @@ use std::str::FromStr;
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, MenuCommand, MenuData};
+use crate::commands::{ButtonCommand, MenuCommand, MenuData, ModalCommand};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
-use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, Menu};
+use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, make_text_input, Menu, TextInput, TextInputStyle};
 use crate::model::message::{AllowedMentions, MessageFlags};
 use crate::model::command::Choice;
 use crate::serde_utils::BoolExt;
@@ -41,7 +41,6 @@ serde_num_tag! { just Serialize =>
         (8) = ApplicationCommandAutocompleteResult(Autocomplete),
         /// respond to an interaction with a popup modal
         /// Not available for `MODAL_SUBMIT` and `PING` interactions
-        // todo
         (9) = Modal(Modal),
     }
 }
@@ -87,21 +86,22 @@ pub struct InteractionMessage {
     pub files: HashSet<MessageAttachment>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Default)]
 pub struct Autocomplete {
     /// autocomplete choices (max of 25 choices)
     // todo the type of the choice has to be generic lol
     pub choices: Vec<Choice<()>>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Default)]
 pub struct Modal {
     /// a developer-defined identifier for the modal, max 100 characters
     pub custom_id: ComponentId,
     /// the title of the popup modal, max 45 characters
-    pub title: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    pub title: Cow<'static, str>,
     /// between 1 and 5 (inclusive) components that make up the modal
-    pub components: Vec<Component>,
+    pub components: Vec<ActionRow>,
 }
 
 pub fn message<F: FnOnce(&mut InteractionMessage)>(builder: F) -> InteractionMessage {
@@ -218,4 +218,73 @@ impl InteractionMessage {
         state.as_ref().register_menu(&mut menu, Box::new(command));
         self.components.push(ActionRow::menu(menu));
     }
+}
+
+pub fn auto_complete<F: FnOnce(&mut Autocomplete)>(builder: F) -> Autocomplete {
+    Autocomplete::build(builder)
+}
+
+// todo
+impl Autocomplete {
+    // todo avoid code repetition?
+    pub fn build_with<F: FnOnce(&mut Self)>(mut with: Self, builder: F) -> Self {
+        builder(&mut with);
+        with
+    }
+
+    pub fn build<F: FnOnce(&mut Self)>(builder: F) -> Self {
+        Self::build_with(Self::default(), builder)
+    }
+}
+
+pub fn modal<B, State, C, F>(state: State, command: C, builder: F) -> Modal
+    where B: 'static,
+          State: AsRef<BotState<B>>,
+          C: ModalCommand<Bot=B>,
+          F: FnOnce(&mut Modal),
+{
+    let mut modal = Modal::build(builder);
+    state.as_ref().register_modal(&mut modal, Box::new(command));
+    modal
+}
+
+// todo test Modal
+
+impl Modal {
+    // todo avoid code repetition?
+    pub fn build_with<F: FnOnce(&mut Self)>(mut with: Self, builder: F) -> Self {
+        builder(&mut with);
+        with
+    }
+
+    pub fn build<F: FnOnce(&mut Self)>(builder: F) -> Self {
+        Self::build_with(Self::default(), builder)
+    }
+
+    pub fn title<S: Into<Cow<'static, str>>>(&mut self, title: S) {
+        self.title = title.into();
+    }
+
+    pub fn text_input<B,State,F>(&mut self, state: State, builder: F)
+        where B: 'static,
+              State: AsRef<BotState<B>>,
+              F: FnOnce(&mut TextInput),
+    {
+        let mut text_input = make_text_input(builder);
+        state.as_ref().register_text_input(&mut text_input);
+        self.components.push(ActionRow::text_input(text_input));
+    }
+
+    // todo fix or delete?
+    /*
+    pub fn text_inputs<F,I>(&mut self, text_inputs: I)
+        where
+            F: FnOnce(&mut TextInput),
+            I: IntoIterator,
+    {
+        let text_inputs: Vec<TextInput> = text_inputs.into();
+        text_inputs.iter().map(|ti| {
+            self.components.push(ActionRow::text_input(ti));
+        });
+    }*/
 }

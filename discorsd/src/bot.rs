@@ -22,15 +22,16 @@ use once_cell::sync::OnceCell;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::cache::Cache;
-use crate::commands::{ButtonCommand, MenuCommandRaw, MessageCommand, ReactionCommand, SlashCommand, SlashCommandRaw, UserCommand};
+use crate::commands::{ButtonCommand, MenuCommandRaw, ModalCommand, MessageCommand, ReactionCommand, SlashCommand, SlashCommandRaw, UserCommand};
 use crate::errors::BotError;
 use crate::http::{ClientResult, DiscordClient};
 use crate::model::commands::{AppCommandData, InteractionUse};
-use crate::model::components::{Button, ComponentId, Menu, SelectMenuType};
+use crate::model::components::{Button, ComponentId, Menu, SelectMenuType, TextInput};
 use crate::model::guild::{Guild, Integration};
 use crate::model::ids::*;
 use crate::model::interaction;
 use crate::model::interaction::{ApplicationCommandData, MessageComponentData};
+use crate::model::interaction_response::Modal;
 use crate::model::message::Message;
 use crate::model::permissions::Role;
 use crate::model::user::User;
@@ -70,6 +71,7 @@ pub struct BotState<B: 'static> {
     pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
     pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
     pub menus: std::sync::RwLock<HashMap<ComponentId, Box<dyn MenuCommandRaw<Bot=B>>>>,
+    pub modals: std::sync::RwLock<HashMap<ComponentId, Box<dyn ModalCommand<Bot=B>>>>,
     // todo need to also have a way to distinguish between separate bot runs, like the first
     //  interaction will always be 0 so you could use the old button or w/e and the new one would
     //  trigger
@@ -92,6 +94,17 @@ impl<B> BotState<B> {
         let id = self.create_id();
         menu.custom_id = id.clone();
         self.menus.write().unwrap().insert(id, command);
+    }
+
+    pub(crate) fn register_text_input(&self, text_input: &mut TextInput) {
+        let id = self.create_id();
+        text_input.custom_id = id.clone();
+    }
+
+    pub(crate) fn register_modal(&self, modal: &mut Modal, command: Box<dyn ModalCommand<Bot=B>>) {
+        let id = self.create_id();
+        modal.custom_id = id.clone();
+        self.modals.write().unwrap().insert(id, command);
     }
 }
 
@@ -481,7 +494,32 @@ pub trait BotExt: Bot + 'static {
                 }
             }
             interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),
-            interaction::Interaction::ModalSubmit(_) => todo!(),
+            interaction::Interaction::ModalSubmit(data) => {
+                // todo is there a way to avoid code duplication?
+                let interaction::InteractionData {
+                    id: interaction_id,
+                    application_id,
+                    token,
+                    channel_id,
+                    data,
+                    message,
+                    user,
+                    app_permissions,
+                    locale
+                } = data;
+                let command = state.modals.read().unwrap().get(&data.custom_id).cloned();
+                if let Some(command) = command {
+                    let interaction = InteractionUse::new(
+                        interaction_id,
+                        application_id,
+                        data,
+                        channel_id,
+                        user,
+                        token,
+                    );
+                    command.run(Arc::clone(&state), interaction).await?;
+                }
+            },
         }
         Ok(())
     }
@@ -509,6 +547,7 @@ impl<B: Bot + 'static> From<B> for BotRunner<B> {
             reaction_commands: Default::default(),
             buttons: Default::default(),
             menus: Default::default(),
+            modals: Default::default(),
             count: Default::default(),
         });
         // todo more than one shard

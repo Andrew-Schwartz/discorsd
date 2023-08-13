@@ -1,12 +1,15 @@
 use std::borrow::Cow;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use crate::BotState;
 
 use crate::model::channel::ChannelType;
 use crate::model::emoji::Emoji;
 use crate::model::ids::{ChannelId, MentionableId, RoleId, UserId};
 use crate::serde_utils::{BoolExt, SkipUnit};
 
+// todo can this be deleted?
+/*
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Components {
@@ -20,7 +23,7 @@ pub enum Components {
         /// between 1 and 5 (inclusive) components that make up the modal
         components: Vec<Component>,
     },
-}
+}*/
 
 serde_num_tag! {
     #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +73,7 @@ serde_repr! {
 serde_num_tag! {
     #[derive(Debug, Clone, PartialEq)]
     pub enum Component = "type": ComponentType {
+        // (ComponentType::ActionRow) = ActionRow(ActionRow), // todo add? (for modal)
         (ComponentType::Button) = Button(Button),
         (ComponentType::StringMenu) = SelectString(Menu<String>),
         (ComponentType::TextInput) = TextInput(TextInput),
@@ -98,9 +102,9 @@ from_menu! {
     ChannelId => SelectChannel;
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash, Default)]
 #[serde(transparent)]
-pub struct ComponentId(String);
+pub struct ComponentId(pub(crate) String);
 
 impl<S> From<S> for ComponentId
     where String: From<S> {
@@ -320,11 +324,11 @@ pub struct SelectOption {
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct TextInput {
     /// Developer-defined identifier for the input; max 100 characters
-    pub custom_id: String,
+    pub(crate) custom_id: ComponentId,
     /// The Text Input Style
     pub style: TextInputStyle,
     /// Label for this component; max 45 characters
-    pub label: String,
+    pub label: Cow<'static, str>,
     /// Minimum input length for a text input; min 0, max 4000
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_length: Option<usize>,
@@ -337,6 +341,7 @@ pub struct TextInput {
     /// Pre-filled value for this component; max 4000 characters
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    // todo change placeholder to use Cow like Menu?
     /// Custom placeholder text if the input is empty; max 100 characters
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
@@ -347,6 +352,38 @@ serde_repr! {
         Short = 1,
         Paragraph = 2,
     }
+}
+
+// todo add more fns?
+impl TextInput {
+    pub(crate) fn new() -> Self {
+        Self {
+            custom_id: ComponentId(String::new()),
+            style: TextInputStyle::Short,
+            label: Cow::from(String::new()),
+            min_length: None,
+            max_length: None,
+            required: false,
+            value: None,
+            placeholder: None,
+        }
+    }
+
+    /// text that appears over the text input, max 45 characters
+    pub fn label<S: Into<Cow<'static, str>>>(&mut self, label: S) {
+        self.label = label.into();
+    }
+
+    /// one of button styles
+    pub fn style(&mut self, style: TextInputStyle) {
+        self.style = style;
+    }
+}
+
+pub fn make_text_input<F: FnOnce(&mut TextInput)>(builder: F) -> TextInput {
+    let mut text_input = TextInput::new();
+    builder(&mut text_input);
+    text_input
 }
 
 // Testing:

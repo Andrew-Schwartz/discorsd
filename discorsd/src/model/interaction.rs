@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::IdMap;
 use crate::model::channel::ChannelType;
-use crate::model::components::{ComponentId, ComponentType};
+use crate::model::components::{Component, ComponentId, ComponentType, ActionRow};
 use crate::model::guild::GuildMember;
 use crate::model::ids::*;
 use crate::model::locales::Locale;
@@ -459,6 +459,7 @@ id_impl!(PartialChannel => ChannelId);
 serde_num_tag! { just Deserialize =>
     #[derive(Debug, Clone)]
     pub enum MessageComponentData = "component_type": ComponentType {
+        // (ComponentType::ActionRow) = ActionRow(ActionRow), // todo add? (for modal)
         (ComponentType::Button) = Button(ButtonPressData),
         (ComponentType::StringMenu) = StringMenu(MenuSelectDataRaw),
         (ComponentType::TextInput) = TextInput,
@@ -495,13 +496,20 @@ pub struct MenuSelectData {
     pub resolved: ResolvedData,
 }
 
+// todo fix?
+#[derive(Deserialize, Debug, Clone)]
+pub struct TextSubmitData {
+    /// the values submitted by the user
+    pub components: ActionRow,
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct ModalSubmitData {
     /// the custom_id of the modal
     pub custom_id: ComponentId,
-    // todo
-    // /// the values submitted by the user
-    // pub components: Vec<Component>,
+    // todo choose Vec data type
+    /// the values submitted by the user
+    pub components: Vec<MessageComponentData>, // Vec<ActionRow>, Vec<TextSubmitData>
 }
 
 #[cfg(test)]

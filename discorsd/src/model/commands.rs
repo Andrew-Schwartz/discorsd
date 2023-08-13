@@ -18,8 +18,8 @@ use crate::model::{command, ids::*, interaction};
 use crate::model::command::{Choice, CommandDataOption, CommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
 use crate::model::components::{ComponentId, SelectMenuType, SelectOption};
 use crate::model::guild::GuildMember;
-use crate::model::interaction::{ButtonPressData, DataOption, DmUser, GuildUser, HasValue, InteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw, SubCommand, SubCommandGroup, Token};
-use crate::model::interaction_response::{InteractionMessage, InteractionResponse};
+use crate::model::interaction::{ButtonPressData, DataOption, DmUser, GuildUser, HasValue, InteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw, TextSubmitData, ModalSubmitData, SubCommand, SubCommandGroup, Token};
+use crate::model::interaction_response::{InteractionMessage, Modal, InteractionResponse};
 use crate::model::message::{Attachment, Message};
 use crate::model::user::User;
 
@@ -60,11 +60,15 @@ pub struct AppCommandData {
     pub command_name: String,
 }
 
-impl InteractionPayload for AppCommandData {}
+pub trait ApplicationCommandData: Send + Sync {}
+
+impl<A: ApplicationCommandData> InteractionPayload for A {}
+
+impl ApplicationCommandData for AppCommandData {}
 
 pub trait ComponentData: Send + Sync {}
 
-impl<C: ComponentData> InteractionPayload for C {}
+impl<C: ComponentData> ApplicationCommandData for C {}
 
 impl ComponentData for ButtonPressData {}
 
@@ -73,6 +77,10 @@ impl ComponentData for MenuSelectDataRaw {}
 impl ComponentData for MenuSelectData {}
 
 impl ComponentData for ComponentId {}
+
+impl ComponentData for TextSubmitData {}
+
+impl InteractionPayload for ModalSubmitData {}
 
 #[async_trait]
 pub trait FinalizeInteraction<Data: InteractionPayload> {
@@ -148,6 +156,7 @@ impl<D: InteractionPayload, U: Usability> InteractionUse<D, U> {
     }
 }
 
+// todo add autofill response
 // its not actually self, you dumb clippy::nursery
 #[allow(clippy::use_self)]
 impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
@@ -197,6 +206,23 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
     {
         let client = state.as_ref();
         self.defer(client).await?.delete(&client).await
+    }
+}
+
+#[allow(clippy::use_self)]
+impl<Data: ApplicationCommandData> InteractionUse<Data, Unused> {
+
+    // todo double-check
+    pub async fn respond_modal<Client, M>(self, client: Client, modal: M) -> ClientResult<InteractionUse<Data, Used>>
+        where Client: AsRef<DiscordClient> + Send,
+              M: Into<Modal> + Send,
+    {
+        let client = client.as_ref();
+        client.create_interaction_response(
+            self.id,
+            self.token.clone(),
+            InteractionResponse::Modal(modal.into()),
+        ).await.map(|_| self.into())
     }
 }
 
