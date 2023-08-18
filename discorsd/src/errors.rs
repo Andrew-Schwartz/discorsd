@@ -6,7 +6,7 @@ use std::ops::Range;
 use thiserror::Error;
 
 use crate::{BotState, serde_utils};
-use crate::commands::SlashCommandRaw;
+use crate::commands::slash_command::SlashCommandRaw;
 use crate::http::{ClientError, DisplayClientError};
 use crate::model::DiscordError;
 use crate::model::ids::*;
@@ -150,7 +150,7 @@ impl CommandParseErrorInfo {
         };
         match &self.source {
             InteractionUser::Guild(GuildUser { id, .. }) => {
-                let guard = state.commands.read().await;
+                let guard = state.slash_commands.read().await;
                 if let Some(guild_lock) = guard.get(id) {
                     let guard = guild_lock.read().await;
                     self.command_fail_message(&source, guard.get(&self.id).map(|c| &**c))
@@ -162,7 +162,7 @@ impl CommandParseErrorInfo {
                 }
             }
             InteractionUser::Dm(_) => {
-                let global = state.global_commands.get().unwrap();
+                let global = state.global_slash_commands.get().unwrap();
                 self.command_fail_message(&source, global.get(&self.id).copied())
             }
         }
@@ -192,6 +192,7 @@ impl Display for CommandParseErrorInfo {
 #[derive(Debug)]
 pub enum CommandParseError {
     BadType(OptionTypeError),
+    FromInt(i64),
     UnknownOption(UnknownOption),
     EmptyOption(String),
     BadOrder(String, usize, Range<usize>),

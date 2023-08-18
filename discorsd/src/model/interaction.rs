@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::IdMap;
 use crate::model::channel::ChannelType;
-use crate::model::components::{Component, ComponentId, ComponentType, ActionRow};
+use crate::model::command::{CommandOptionType, CommandType};
+use crate::model::components::{ComponentId, ComponentType};
 use crate::model::guild::GuildMember;
 use crate::model::ids::*;
 use crate::model::locales::Locale;
 use crate::model::message::{Attachment, Message};
-use crate::model::command::{CommandOptionType, CommandType};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
 use crate::serde_utils::null_as_t;
@@ -428,6 +428,7 @@ pub struct ResolvedData {
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+// todo rename GuildMemberInfo (and flatten in as the data holder in GuildMember)
 pub struct PartialGuildMember {
     /// this users guild nickname
     pub nick: Option<String>,
@@ -458,11 +459,21 @@ id_impl!(PartialChannel => ChannelId);
 
 serde_num_tag! { just Deserialize =>
     #[derive(Debug, Clone)]
-    pub enum MessageComponentData = "component_type": ComponentType {
-        // (ComponentType::ActionRow) = ActionRow(ActionRow), // todo add? (for modal)
+    // just "type" because ActionRowData is only in modals
+    pub enum ActionRowData = "type": ComponentType {
+        (ComponentType::ActionRow) = ActionRow {
+            components: Vec<MessageComponentData>,
+        }
+    }
+}
+
+serde_num_tag! { just Deserialize =>
+    #[derive(Debug, Clone)]
+    // "component_type" when inline components, "type" for modals
+    pub enum MessageComponentData = "component_type" alias "type": ComponentType {
         (ComponentType::Button) = Button(ButtonPressData),
         (ComponentType::StringMenu) = StringMenu(MenuSelectDataRaw),
-        (ComponentType::TextInput) = TextInput,
+        (ComponentType::TextInput) = TextInput(TextSubmitData),
         (ComponentType::UserMenu) = UserMenu(MenuSelectDataRaw),
         (ComponentType::RoleMenu) = RoleMenu(MenuSelectDataRaw),
         (ComponentType::MentionableMenu) = MentionableMenu(MenuSelectDataRaw),
@@ -500,16 +511,16 @@ pub struct MenuSelectData {
 #[derive(Deserialize, Debug, Clone)]
 pub struct TextSubmitData {
     /// the values submitted by the user
-    pub components: ActionRow,
+    pub custom_id: ComponentId,
+    pub value: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ModalSubmitData {
     /// the custom_id of the modal
     pub custom_id: ComponentId,
-    // todo choose Vec data type
     /// the values submitted by the user
-    pub components: Vec<MessageComponentData>, // Vec<ActionRow>, Vec<TextSubmitData>
+    pub components: Vec<ActionRowData>,
 }
 
 #[cfg(test)]

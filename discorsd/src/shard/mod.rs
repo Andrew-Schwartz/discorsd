@@ -25,10 +25,9 @@ use model::{HelloPayload, Payload, Resume};
 use crate::Bot;
 use crate::bot::BotState;
 use crate::cache::Update;
-use crate::commands::SlashCommandRaw;
 use crate::http::ClientError;
 use crate::macros::API_VERSION;
-use crate::model::command::Command;
+use crate::model::command::ApplicationCommand;
 use crate::model::ids::{CommandId, Id};
 use crate::shard::model::Heartbeat;
 
@@ -401,6 +400,7 @@ impl<B: Bot + 'static> Shard<B> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_dispatch(&mut self, event: DispatchPayload) /*-> ShardResult<()>*/ {
         use DispatchPayload::*;
         event.clone().update(&self.state.cache).await;
@@ -417,48 +417,36 @@ impl<B: Bot + 'static> Shard<B> {
             let resume = gateway_params(&ready.resume_gateway_url);
             self.resume_gateway = Some(resume);
 
-            // todo where would type signatures be helpful?
-            if self.state.global_commands.get().is_none() {
+            if self.state.global_slash_commands.get().is_none() {
                 let app = ready.application.id;
                 let client = &self.state.client;
 
-                let global_slash_commands = B::global_commands();
-                let global_user_commands = B::global_user_commands();
-                let global_message_commands = B::global_message_commands();
-                let slash_index = global_slash_commands.len();
-                let user_index = slash_index + global_user_commands.len();
-                let message_index = user_index + global_message_commands.len();
-                let global_commands = global_slash_commands
+                let slash_commands = B::global_commands();
+                let user_commands = B::global_user_commands();
+                let message_commands = B::global_message_commands();
+                let global_commands = slash_commands
                     .iter().map(|c| c.command())
-                    .chain(global_user_commands.iter().map(|c| c.command()))
-                    .chain(global_message_commands.iter().map(|c| c.command()))
+                    .chain(user_commands.iter().map(|c| c.command()))
+                    .chain(message_commands.iter().map(|c| c.command()))
                     .collect();
-                let commands = client
+                let mut commands = client
                     .bulk_overwrite_global_commands(
                         app,
                         global_commands,
                     ).await
                     .unwrap();
-                // todo is code repetition avoidable?
-                // todo is there a rustier way to get vector slices?
-                let slash_commands = (&commands[0..slash_index])
-                    .into_iter()
-                    .zip(global_slash_commands)
-                    .map(|(ac, c)| (ac.id, *c))
-                    .collect();
-                let user_commands = (&commands[slash_index..user_index])
-                    .into_iter()
-                    .zip(global_user_commands)
-                    .map(|(ac, c)| (ac.id, *c))
-                    .collect();
-                let message_commands = (&commands[user_index..message_index])
-                    .into_iter()
-                    .zip(global_message_commands)
-                    .map(|(ac, c)| (ac.id, *c))
-                    .collect();
-                let _result = self.state.global_commands.set(slash_commands);
-                let _result = self.state.global_user_commands.set(user_commands);
-                let _result = self.state.global_message_commands.set(message_commands);
+                fn set_commands<C: ?Sized>(
+                    app_commands: &mut Vec<ApplicationCommand>,
+                    commands: &[&'static C],
+                ) -> HashMap<CommandId, &'static C> {
+                    app_commands.drain(..commands.len())
+                        .zip_eq(commands)
+                        .map(|(ac, c)| (ac.id, *c))
+                        .collect()
+                }
+                self.state.global_slash_commands.get_or_init(|| set_commands(&mut commands, slash_commands));
+                self.state.global_user_commands.get_or_init(|| set_commands(&mut commands, user_commands));
+                self.state.global_message_commands.get_or_init(|| set_commands(&mut commands, message_commands));
             }
         }
         let state = Arc::clone(&self.state);

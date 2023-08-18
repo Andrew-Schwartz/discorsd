@@ -307,7 +307,8 @@ macro_rules! serde_num_tag {
     (
         $(just $skip_ser_or_de:tt =>)?
         $(#[$enum_meta:meta])*
-        pub enum $enum_name:ident = $tag_name:literal: $tag_type:ty $(as $repr_name:ident)? $(, inner = $rename:literal)? {
+        pub enum $enum_name:ident = $tag_name:literal $(alias $($alias:literal),+ $(,)?)? :
+                 $tag_type:ty $(as $repr_name:ident)? $(, inner = $rename:literal)? {
             $(
                 // todo distinguish the docs from the other meta stuff and copy those into the repr
                 $(#[$variant_meta:meta])*
@@ -367,6 +368,9 @@ macro_rules! serde_num_tag {
                     fn deserialize<D: ::serde::Deserializer<'de>>(d: D) -> ::std::result::Result<Self, D::Error> {
                         let value = <::serde_json::Value>::deserialize(d)?;
                         let variant_value = value.get($tag_name)
+                            $($(
+                                .or_else(|| value.get($alias))
+                            )+)?
                             .ok_or_else(|| ::serde::de::Error::missing_field($tag_name))?;
                         let variant = ::serde_json::from_value(variant_value.clone())
                             .map_err(::serde::de::Error::custom)?;

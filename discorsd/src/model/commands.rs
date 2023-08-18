@@ -6,11 +6,12 @@ use std::hash::{BuildHasher, Hash};
 use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 
 use crate::{BotState, utils};
-use crate::commands::SlashCommandRaw;
+use crate::commands::slash_command::SlashCommandRaw;
 use crate::errors::*;
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::interaction::WebhookMessage;
@@ -160,7 +161,7 @@ impl<D: InteractionPayload, U: Usability> InteractionUse<D, U> {
 // its not actually self, you dumb clippy::nursery
 #[allow(clippy::use_self)]
 impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
-    pub fn new(
+    pub(crate) fn new(
         id: InteractionId,
         application_id: ApplicationId,
         data: Data,
@@ -211,7 +212,6 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
 
 #[allow(clippy::use_self)]
 impl<Data: ApplicationCommandData> InteractionUse<Data, Unused> {
-
     // todo double-check
     pub async fn respond_modal<Client, M>(self, client: Client, modal: M) -> ClientResult<InteractionUse<Data, Used>>
         where Client: AsRef<DiscordClient> + Send,
@@ -314,12 +314,15 @@ impl<Data: InteractionPayload, U: NotUnused> InteractionUse<Data, U> {
               State: AsRef<BotState<B>> + Send
     {
         let state = state.as_ref();
+        // sleep a few ms to wait for the interaction to get processed
+        // todo test if this is a good sleep amount
+        tokio::time::sleep(Duration::from_millis(10)).await;
         if let Some(message) = state.cache.interaction_response(self).await {
             Ok(message)
         } else {
             state.client.get_original_interaction_response(
                 state.application_id(),
-                self.token.clone()
+                self.token.clone(),
             ).await
         }
     }
@@ -426,7 +429,7 @@ macro_rules! option_integers {
                                 ..
                             }
                         ) => value.try_into()
-                            .map_err(|_| todo!()),
+                            .map_err(|_| CommandParseError::FromInt(value)),
                         bad => Err(CommandParseError::BadType(OptionTypeError {
                             value: bad,
                             desired: CommandOptionTypeParsed::I64,
@@ -468,13 +471,20 @@ macro_rules! option_ids {
                 type Options = InteractionDataOption;
 
                 fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
-                    todo!()
-                    // options.lower.string()
-                    //     .and_then(|s| s.parse().map_err(|_| $crate::errors::OptionTypeError {
-                    //         value: $crate::model::old_interaction::OptionValue::String(s),
-                    //         desired: CommandOptionTypeParsed::$cotp,
-                    //     }))
-                    //     .map_err(|e| e.into())
+                    match options {
+                        InteractionDataOption::Integer(
+                            DataOption {
+                                data: HasValue { value },
+                                ..
+                            }
+                        ) => u64::try_from(value)
+                            .map_err(|_| CommandParseError::FromInt(value))
+                            .map(Self),
+                        bad => Err(CommandParseError::BadType(OptionTypeError {
+                            value: bad,
+                            desired: CommandOptionTypeParsed::I64,
+                        }))
+                    }
                 }
 
                 type VecArg = CommandDataOption;

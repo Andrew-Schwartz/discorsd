@@ -8,7 +8,8 @@ use std::str::FromStr;
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, MenuCommand, MenuData};
+use crate::commands::MenuData;
+use crate::commands::component_command::{ButtonCommand, MenuCommand};
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::http::routes::Route::*;

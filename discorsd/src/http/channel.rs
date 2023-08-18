@@ -19,7 +19,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, MenuCommand, MenuData};
+use crate::commands::MenuData;
+use crate::commands::component_command::{ButtonCommand, MenuCommand};
 use crate::http::{ClientError, DiscordClient};
 use crate::http::ClientResult;
 use crate::http::interaction::WebhookMessage;

@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use crate::BotState;
 
 use crate::model::channel::ChannelType;
 use crate::model::emoji::Emoji;
@@ -336,7 +335,7 @@ pub struct TextInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<usize>,
     /// Whether this component is required to be filled (defaults to true)
-    #[serde(default = "bool::default_true", skip_serializing_if = "bool::is_true")]
+    #[serde(default, skip_serializing_if = "bool::is_false")]
     pub required: bool,
     /// Pre-filled value for this component; max 4000 characters
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -356,16 +355,24 @@ serde_repr! {
 
 // todo add more fns?
 impl TextInput {
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn blank() -> Self {
         Self {
             custom_id: ComponentId(String::new()),
             style: TextInputStyle::Short,
-            label: Cow::from(String::new()),
+            label: Cow::Borrowed(""),
             min_length: None,
             max_length: None,
             required: false,
             value: None,
             placeholder: None,
+        }
+    }
+
+    pub fn new<S: Into<Cow<'static, str>>>(label: S, style: TextInputStyle) -> Self {
+        Self {
+            label: label.into(),
+            style,
+            ..Self::blank()
         }
     }
 
@@ -378,10 +385,18 @@ impl TextInput {
     pub fn style(&mut self, style: TextInputStyle) {
         self.style = style;
     }
+
+    #[must_use]
+    pub fn optional(self) -> Self {
+        Self {
+            required: false,
+            ..self
+        }
+    }
 }
 
 pub fn make_text_input<F: FnOnce(&mut TextInput)>(builder: F) -> TextInput {
-    let mut text_input = TextInput::new();
+    let mut text_input = TextInput::blank();
     builder(&mut text_input);
     text_input
 }
@@ -452,7 +467,7 @@ mod tests {
                 ActionRow::new(vec![Component::Button(
                     Button {
                         style: ButtonStyle::Primary,
-                        label: Some("Click me!".to_string()),
+                        label: Some("Click me!".into()),
                         emoji: None,
                         custom_id: Some("click_one".into()),
                         url: None,
@@ -564,7 +579,7 @@ mod tests {
                     },
                 ],
                 channel_types: (),
-                placeholder: Some("Choose a class".to_string()),
+                placeholder: Some("Choose a class".into()),
                 min_values: Some(1),
                 max_values: Some(3),
                 disabled: false,

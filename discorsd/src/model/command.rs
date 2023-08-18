@@ -5,7 +5,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::commands::{CommandData, SlashCommandRaw};
+use crate::model::commands::{CommandData};
+use crate::commands::slash_command::SlashCommandRaw;
 use crate::model::channel::ChannelType;
 use crate::model::ids::{ApplicationId, ChannelId, CommandId, MentionableId, RoleId, UserId};
 use crate::model::locales::Locale;
@@ -98,7 +99,7 @@ serde_num_tag! {
 }
 
 impl Command {
-    pub fn chat_input(
+    pub fn slash_command(
         name: &'static str,
         description: Cow<'static, str>,
         options: Vec<CommandOption>,
@@ -112,6 +113,7 @@ impl Command {
             options,
         }
     }
+
     pub fn user_command(
         name: &'static str,
     ) -> Self {

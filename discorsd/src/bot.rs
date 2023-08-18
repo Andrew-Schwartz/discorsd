@@ -19,10 +19,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use async_trait::async_trait;
 use log::error;
 use once_cell::sync::OnceCell;
-use tokio::sync::{RwLock, RwLockWriteGuard};
+use tokio::sync::RwLock;
 
 use crate::cache::Cache;
-use crate::commands::{ButtonCommand, MenuCommandRaw, ModalCommand, MessageCommand, ReactionCommand, SlashCommand, SlashCommandRaw, UserCommand};
+use crate::commands::*;
 use crate::errors::BotError;
 use crate::http::{ClientResult, DiscordClient};
 use crate::model::commands::{AppCommandData, InteractionUse};
@@ -58,20 +58,26 @@ pub struct BotState<B: 'static> {
     /// Your bot type, storing whatever other data you need.
     pub bot: B,
     /// The [`SlashCommand`](SlashCommand)s your bot has created, mapped by guild.
-    pub commands: RwLock<GuildIdMap<GuildCommands<B>>>,
-    /// The [`SlashCommand`](SlashCommand) ids your bot has created, by name in each guild.
-    pub command_names: RwLock<GuildIdMap<HashMap<&'static str, CommandId>>>,
-    /// The global [`SlashCommand`](SlashCommand)s your bot has created.
-    pub global_commands: OnceCell<HashMap<CommandId, &'static dyn SlashCommandRaw<Bot=B>>>,
+    pub slash_commands: RwLock<GuildIdMap<GuildCommands<B>>>,
+    // /// The [`SlashCommand`](SlashCommand) ids your bot has created, by name in each guild.
+    // pub command_names: RwLock<GuildIdMap<HashMap<&'static str, CommandId>>>,
+    /// The global [`SlashCommand`](SlashCommand)s your b2ot has created.
+    pub global_slash_commands: OnceCell<HashMap<CommandId, &'static dyn SlashCommandRaw<Bot=B>>>,
     /// The global [`UserCommand`](UserCommand)s your bot has created.
     pub global_user_commands: OnceCell<HashMap<CommandId, &'static dyn UserCommand<Bot=B>>>,
     /// The global [`MessageCommand`](MessageCommand)s your bot has created.
     pub global_message_commands: OnceCell<HashMap<CommandId, &'static dyn MessageCommand<Bot=B>>>,
+    // /// The global [`SlashCommand`](SlashCommand) ids your bot has created, by name.
+    // pub global_command_names: OnceCell<HashMap<&'static str, CommandId>>,
+    // /// The global [`UserCommand`](UserCommand) ids your bot has created, by name.
+    // pub global_user_command_names: OnceCell<HashMap<&'static str, CommandId>>,
+    // /// The global [`MessageCommand`](MessageCommand) ids your bot has created, by name.
+    // pub global_message_command_names: OnceCell<HashMap<&'static str, CommandId>>,
     /// The [`ReactionCommand`](ReactionCommand)s your bot is using.
     pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
     pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
     pub menus: std::sync::RwLock<HashMap<ComponentId, Box<dyn MenuCommandRaw<Bot=B>>>>,
-    pub modals: std::sync::RwLock<HashMap<ComponentId, Box<dyn ModalCommand<Bot=B>>>>,
+    pub modals: std::sync::RwLock<HashMap<ComponentId, Box<dyn ModalCommandRaw<Bot=B>>>>,
     // todo need to also have a way to distinguish between separate bot runs, like the first
     //  interaction will always be 0 so you could use the old button or w/e and the new one would
     //  trigger
@@ -98,10 +104,10 @@ impl<B> BotState<B> {
 
     pub(crate) fn register_text_input(&self, text_input: &mut TextInput) {
         let id = self.create_id();
-        text_input.custom_id = id.clone();
+        text_input.custom_id = id;
     }
 
-    pub(crate) fn register_modal(&self, modal: &mut Modal, command: Box<dyn ModalCommand<Bot=B>>) {
+    pub(crate) fn register_modal(&self, modal: &mut Modal, command: Box<dyn ModalCommandRaw<Bot=B>>) {
         let id = self.create_id();
         modal.custom_id = id.clone();
         self.modals.write().unwrap().insert(id, command);
@@ -126,20 +132,20 @@ impl<B: Send + Sync> BotState<B> {
                 command.command(),
             ).await?;
             let name = command.name();
-            self.commands.write()
+            self.slash_commands.write()
                 .await
                 .entry(guild)
                 .or_default()
                 .write()
                 .await
                 .insert(application_command.id, command);
-            self.command_names.write()
-                .await
-                .entry(guild)
-                .or_default()
-                .write()
-                .await
-                .insert(name, application_command.id);
+            // self.command_names.write()
+            //     .await
+            //     .entry(guild)
+            //     .or_default()
+            //     .write()
+            //     .await
+            //     .insert(name, application_command.id);
         }
         Ok(())
     }
@@ -173,39 +179,58 @@ impl<B: Send + Sync> BotState<B> {
             .id
     }
 
-    /// Get the id of command `C` in this `guild`.
-    ///
-    /// # Note
-    ///
-    /// Locks [BotState::command_names](BotState::command_names) in read mode, meaning this can
-    /// cause deadlocks if called while a write guard is held.
-    pub async fn try_command_id<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> Option<CommandId> {
-        self.command_names.read().await
-            .get(&guild)?
-            .read().await
-            .get(C::NAME)
-            .copied()
-    }
+    // /// Get the id of command `C` in this `guild`.
+    // ///
+    // /// # Note
+    // ///
+    // /// Locks [BotState::command_names](BotState::command_names) in read mode, meaning this can
+    // /// cause deadlocks if called while a write guard is held.
+    // pub async fn try_command_id<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> Option<CommandId> {
+    //     self.command_names.read().await
+    //         .get(&guild)?
+    //         .read().await
+    //         .get(C::NAME)
+    //         .copied()
+    // }
 
-    /// Get the id of command `C` in this `guild`.
-    ///
-    /// # Note
-    ///
-    /// Locks [BotState::command_names](BotState::command_names) in read mode, meaning this can
-    /// cause deadlocks if called while a write guard is held.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the bot is not in this `guild`, or if the command `C` does not exist
-    /// in this guild.
-    pub async fn command_id<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> CommandId {
-        *self.command_names.read().await
-            .get(&guild)
-            .unwrap_or_else(|| panic!("Guild {guild} exists"))
-            .read().await
-            .get(C::NAME)
-            .unwrap_or_else(|| panic!("{} exists", C::NAME))
-    }
+    // /// Get the id of command `C` in this `guild`.
+    // ///
+    // /// # Note
+    // ///
+    // /// Locks [BotState::command_names](BotState::command_names) in read mode, meaning this can
+    // /// cause deadlocks if called while a write guard is held.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Panics if the bot is not in this `guild`, or if the command `C` does not exist
+    // /// in this guild.
+    // pub async fn command_id<C: SlashCommand<Bot=B>>(&self, guild: GuildId) -> CommandId {
+    //     *self.command_names.read().await
+    //         .get(&guild)
+    //         .unwrap_or_else(|| panic!("Guild {guild} exists"))
+    //         .read().await
+    //         .get(C::NAME)
+    //         .unwrap_or_else(|| panic!("{} exists", C::NAME))
+    // }
+
+    // /// Get the id of the global command `C`.
+    // ///
+    // /// # Note
+    // ///
+    // /// Locks [BotState::global_command_names](BotState::global_command_names) in read mode, meaning
+    // /// this can cause deadlocks if called while a write guard is held.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Panics if the bot has not received the [Ready](crate::shard::dispatch::Ready) event yet, or if the
+    // /// command `C` does not exist is not a global command.
+    // pub fn global_command_id<C: SlashCommand<Bot=B>>(&self) -> CommandId {
+    //     *self.global_command_names.get()
+    //         .expect("Bot hasn't connected yet")
+    //         .get(C::NAME)
+    //         .unwrap_or_else(|| panic!("{} exists", C::NAME))
+    // }
+    // todo are global_user_command_id and global_message_command_id needed?
 
     // bots can't use these
     // /// Edits the [`default_permission`](crate::commands::Command::default_permission) to be true
@@ -235,27 +260,27 @@ impl<B: Send + Sync> BotState<B> {
     //         .default_permissions(self, guild, false).await
     // }
 
-    /// Get a mutable [`SlashCommand`](SlashCommand) `C` by type.
-    ///
-    /// A mutable reference to a [`RwLockWriteGuard`](RwLockWriteGuard) must be passed in, which the
-    /// lifetime of the returned mutable reference is tied to.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the bot is not in this `guild`, or if the command `C` does not exist.
-    #[allow(clippy::needless_lifetimes)]
-    pub async fn get_command_mut<'c, C: SlashCommand<Bot=B>>(
-        &self,
-        guild: GuildId,
-        // not ideal that it has to take this instead of just the guild.
-        commands: &'c mut RwLockWriteGuard<'_, GuildCommands<B>>,
-    ) -> (CommandId, &'c mut C) {
-        let id = self.command_id::<C>(guild).await;
-        commands.get_mut(&id)
-            .and_then(|c| c.downcast_mut())
-            .map(|command| (id, command))
-            .unwrap_or_else(|| panic!("`{}` command exists", C::NAME))
-    }
+    // /// Get a mutable [`SlashCommand`](SlashCommand) `C` by type.
+    // ///
+    // /// A mutable reference to a [`RwLockWriteGuard`](RwLockWriteGuard) must be passed in, which the
+    // /// lifetime of the returned mutable reference is tied to.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Panics if the bot is not in this `guild`, or if the command `C` does not exist.
+    // #[allow(clippy::needless_lifetimes)]
+    // pub async fn get_command_mut<'c, C: SlashCommand<Bot=B>>(
+    //     &self,
+    //     guild: GuildId,
+    //     // not ideal that it has to take this instead of just the guild.
+    //     commands: &'c mut RwLockWriteGuard<'_, GuildCommands<B>>,
+    // ) -> (CommandId, &'c mut C) {
+    //     let id = self.command_id::<C>(guild).await;
+    //     commands.get_mut(&id)
+    //         .and_then(|c| c.downcast_mut())
+    //         .map(|command| (id, command))
+    //         .unwrap_or_else(|| panic!("`{}` command exists", C::NAME))
+    // }
 }
 
 impl<B: Debug> Debug for BotState<B> {
@@ -391,12 +416,12 @@ pub trait BotExt: Bot + 'static {
                             user,
                             token,
                         );
-                        let global_command = state.global_commands.get().unwrap().get(&id);
+                        let global_command = state.global_slash_commands.get().unwrap().get(&id);
                         if let Some(command) = global_command {
                             command.run(Arc::clone(&state), interaction, options).await?;
                         } else {
                             let command = {
-                                let guard = state.commands.read().await;
+                                let guard = state.slash_commands.read().await;
                                 // todo fix this unwrap lol
                                 let commands = guard.get(&interaction.guild().unwrap()).unwrap().read().await;
                                 commands.get(&id).cloned()
@@ -490,7 +515,7 @@ pub trait BotExt: Bot + 'static {
                             command.run(Arc::clone(&state), interaction).await?;
                         }
                     }
-                    MessageComponentData::TextInput => todo!(),
+                    MessageComponentData::TextInput(_) => unreachable!("True while inline text fields aren't supported"),
                 }
             }
             interaction::Interaction::ApplicationCommandAutocomplete(_) => todo!(),
@@ -519,7 +544,7 @@ pub trait BotExt: Bot + 'static {
                     );
                     command.run(Arc::clone(&state), interaction).await?;
                 }
-            },
+            }
         }
         Ok(())
     }
@@ -539,11 +564,14 @@ impl<B: Bot + 'static> From<B> for BotRunner<B> {
             stream: Default::default(),
             cache: Default::default(),
             bot,
-            commands: Default::default(),
-            command_names: Default::default(),
-            global_commands: Default::default(),
+            slash_commands: Default::default(),
+            // command_names: Default::default(),
+            global_slash_commands: Default::default(),
             global_user_commands: Default::default(),
             global_message_commands: Default::default(),
+            // global_command_names: Default::default(),
+            // global_user_command_names: Default::default(),
+            // global_message_command_names: Default::default(),
             reaction_commands: Default::default(),
             buttons: Default::default(),
             menus: Default::default(),

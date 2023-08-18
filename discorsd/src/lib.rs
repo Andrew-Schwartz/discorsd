@@ -28,7 +28,7 @@
 #[macro_use]
 extern crate bitflags;
 
-/// Re-exported for use with [`Bot`](bot::Bot), [`SlashCommand`](commands::SlashCommand), etc.
+/// Re-exported for use with [`Bot`](bot::Bot), [`SlashCommand`](commands::slash_command::SlashCommand), etc.
 pub use async_trait::async_trait;
 
 pub use bot::*;

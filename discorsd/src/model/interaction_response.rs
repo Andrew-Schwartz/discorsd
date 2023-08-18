@@ -1,16 +1,19 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::mem;
 use std::str::FromStr;
 
 use serde::Serialize;
 
 use crate::BotState;
-use crate::commands::{ButtonCommand, MenuCommand, MenuData, ModalCommand};
+use crate::commands::{ArrayLen, MenuData};
+use crate::commands::component_command::{ButtonCommand, MenuCommand};
+use crate::commands::modal_command::{ModalCommand, ModalCommandRaw};
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
-use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, make_text_input, Menu, TextInput, TextInputStyle};
-use crate::model::message::{AllowedMentions, MessageFlags};
 use crate::model::command::Choice;
+use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, make_text_input, Menu, TextInput};
+use crate::model::message::{AllowedMentions, MessageFlags};
 use crate::serde_utils::BoolExt;
 
 serde_num_tag! { just Serialize =>
@@ -237,18 +240,91 @@ impl Autocomplete {
     }
 }
 
-pub fn modal<B, State, C, F>(state: State, command: C, builder: F) -> Modal
+pub struct ModalBuilder<const N: usize> {
+    /// the title of the popup modal, max 45 characters
+    pub(crate) title: Cow<'static, str>,
+    /// between 1 and 5 (inclusive) components that make up the modal
+    pub(crate) inputs: [TextInput; N],
+}
+
+impl ModalBuilder<0> {
+    pub fn new<S: Into<Cow<'static, str>>>(title: S) -> Self {
+        Self {
+            title: title.into(),
+            inputs: [],
+        }
+    }
+}
+
+impl<const N: usize> ModalBuilder<N> {
+    pub fn with_inputs<S: Into<Cow<'static, str>>>(title: S, inputs: [TextInput; N]) -> Self {
+        Self {
+            title: title.into(),
+            inputs,
+        }
+    }
+
+    pub fn build(self) -> Modal {
+        Modal {
+            custom_id: Default::default(),
+            title: self.title,
+            components: self.inputs.map(ActionRow::text_input).to_vec(),
+        }
+    }
+}
+
+macro_rules! add_field {
+    ($($(#[$meta:meta])? $n:literal),* $(,)*) => {
+        $(
+            impl ModalBuilder<$n> {
+                $(#[$meta])?
+                pub fn add_field(mut self, input: TextInput) -> ModalBuilder<{ $n + 1 }> {
+                    const DEFAULT: TextInput = TextInput::blank();
+                    let mut arr = std::array::from_fn(|i| if i < $n {
+                        mem::replace(&mut self.inputs[i], DEFAULT)
+                    } else {
+                        DEFAULT
+                    });
+                    arr[$n] = input;
+                    ModalBuilder {
+                        title: self.title,
+                        inputs: arr,
+                    }
+                }
+            }
+        )*
+    };
+}
+
+add_field!(#[allow(unused_comparisons)] 0, 1, 2, 3, 4);
+
+pub fn modal2<B, State, C, const N: usize>(
+    state: State,
+    command: C,
+    mut builder: ModalBuilder<N>,
+) -> Modal
     where B: 'static,
           State: AsRef<BotState<B>>,
           C: ModalCommand<Bot=B>,
+          <C as ModalCommand>::Values: ArrayLen<N>,
+{
+    let state = state.as_ref();
+    builder.inputs.iter_mut().for_each(|t| state.register_text_input(t));
+    let mut modal = builder.build();
+    state.register_modal(&mut modal, Box::new(command));
+    modal
+}
+
+pub fn modal<B, State, C, F>(state: State, command: C, builder: F) -> Modal
+    where B: 'static,
+          State: AsRef<BotState<B>>,
+          C: ModalCommandRaw<Bot=B>,
           F: FnOnce(&mut Modal),
 {
     let mut modal = Modal::build(builder);
     state.as_ref().register_modal(&mut modal, Box::new(command));
     modal
 }
-
-// todo test Modal
 
 impl Modal {
     // todo avoid code repetition?
@@ -265,7 +341,7 @@ impl Modal {
         self.title = title.into();
     }
 
-    pub fn text_input<B,State,F>(&mut self, state: State, builder: F)
+    pub fn text_input<B, State, F>(&mut self, state: State, builder: F)
         where B: 'static,
               State: AsRef<BotState<B>>,
               F: FnOnce(&mut TextInput),
