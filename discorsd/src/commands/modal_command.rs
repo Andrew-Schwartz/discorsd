@@ -1,5 +1,5 @@
-use std::convert::Infallible;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
+use std::num::ParseIntError;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -37,36 +37,44 @@ impl<const N: usize> ArrayLen<N> for [String; N] {}
 
 impl ArrayLen<1> for String {}
 
-pub trait ModalValues: Sized {
-    type Error;
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum ModalParseError {
+    MissingField(&'static str),
+    ParseIntError(ParseIntError, String, &'static str),
+}
 
-    fn from_vec(vec: Vec<String>) -> Result<Self, Self::Error>;
+impl Display for ModalParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModalParseError::MissingField(field) => write!(f, "missing required field `{field}`"),
+            ModalParseError::ParseIntError(e, val, field) => write!(f, "error parsing `{field}` = `{val}` as number: `{e}`"),
+        }
+    }
+}
+
+pub trait ModalValues: Sized {
+    fn from_vec(vec: Vec<String>) -> Result<Self, ModalParseError>;
 }
 
 impl ModalValues for Vec<String> {
-    type Error = Infallible;
-
-    fn from_vec(vec: Vec<String>) -> Result<Self, Self::Error> {
+    fn from_vec(vec: Vec<String>) -> Result<Self, ModalParseError> {
         Ok(vec)
     }
 }
 
 impl<const N: usize> ModalValues for [String; N] {
-    type Error = Vec<String>;
-
-    fn from_vec(vec: Vec<String>) -> Result<Self, Self::Error> {
+    fn from_vec(vec: Vec<String>) -> Result<Self, ModalParseError> {
         vec.try_into()
+            .map_err(|e| todo!())
     }
 }
 
 #[allow(clippy::use_self)]
 impl ModalValues for String {
-    type Error = Vec<String>;
-
-    fn from_vec(mut vec: Vec<String>) -> Result<Self, Self::Error> {
+    fn from_vec(mut vec: Vec<String>) -> Result<Self, ModalParseError> {
         match vec.len() {
             1 => Ok(vec.remove(0)),
-            _ => Err(vec),
+            _ => Err(todo!()),
         }
     }
 }
@@ -86,7 +94,6 @@ pub trait ModalCommand: Send + Sync + DynClone + Downcast + ModalCommandRaw<Bot=
 #[async_trait]
 impl<MC: ModalCommand> ModalCommandRaw for MC
     where <Self as ModalCommand>::Values: Send,
-          <<Self as ModalCommand>::Values as ModalValues>::Error: Debug + Send,
 {
     type Bot = <Self as ModalCommand>::Bot;
 
@@ -120,7 +127,7 @@ impl<MC: ModalCommand> ModalCommandRaw for MC
                 interaction,
                 values,
             ).await,
-            Err(e) => interaction.respond(&state, format!("{e:?}"))
+            Err(e) => interaction.respond(&state, format!("{e}"))
                 .await
                 .map_err(Into::into),
         }

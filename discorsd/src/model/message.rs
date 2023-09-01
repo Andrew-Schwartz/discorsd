@@ -273,6 +273,8 @@ bitflags! {
 		const SOURCE_MESSAGE_DELETED = 1 << 3;
         /// this message came from the urgent message system
 		const URGENT = 1 << 4;
+        /// Undocumented
+		const UNDOCUMENTED_5 = 1 << 5;
 		/// this message is only visible to the user who invoked the Interaction
 		const EPHEMERAL = 1 << 6;
         /// this message is an Interaction Response and the bot is "thinking"
@@ -280,9 +282,9 @@ bitflags! {
         /// this message failed to mention some roles and add their members to the thread
         const FAILED_TO_MENTION_SOME_ROLES_IN_THREAD = 1 << 8;
         /// Undocumented so far
-        const UNKNOWN_512 = 1 << 9;
+        const UNKNOWN_9 = 1 << 9;
         /// Undocumented so far
-        const UNKNOWN_1024 = 1 << 10;
+        const UNKNOWN_10 = 1 << 10;
     }
 }
 serde_bitflag!(MessageFlags: u16);

@@ -25,7 +25,8 @@ macro_rules! id_impl {
                     let seconds = millis / 1000;
                     let nanos = (millis % 1000) * 1_000_000;
 
-                    let dt = NaiveDateTime::from_timestamp(seconds as _, nanos as _);
+                    let dt = NaiveDateTime::from_timestamp_opt(seconds as _, nanos as _)
+                                .expect("parsing id datetime should work");
                     DateTime::from_utc(dt, Utc)
                 }
             }
