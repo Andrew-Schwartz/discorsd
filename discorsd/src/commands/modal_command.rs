@@ -1,15 +1,17 @@
 use std::convert::Infallible;
-use async_trait::async_trait;
-use dyn_clone::DynClone;
-use downcast_rs::{Downcast, impl_downcast};
-use std::sync::Arc;
 use std::fmt::Debug;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use downcast_rs::{Downcast, impl_downcast};
+use dyn_clone::DynClone;
 use itertools::Itertools;
+
 use crate::BotState;
 use crate::errors::BotError;
+pub use crate::model::commands::*;
 use crate::model::components::ComponentId;
 use crate::model::interaction::{ActionRowData, MessageComponentData, ModalSubmitData, TextSubmitData};
-pub use crate::model::commands::*;
 
 #[macro_export]
 macro_rules! modal_values {
@@ -30,7 +32,9 @@ macro_rules! modal_values {
 pub trait ArrayLen<const N: usize> {}
 
 impl<const N: usize> ArrayLen<N> for Vec<String> {}
+
 impl<const N: usize> ArrayLen<N> for [String; N] {}
+
 impl ArrayLen<1> for String {}
 
 pub trait ModalValues: Sized {
@@ -109,12 +113,17 @@ impl<MC: ModalCommand> ModalCommandRaw for MC
             token,
             _priv: Default::default(),
         };
-        ModalCommand::run(
-            self,
-            state,
-            interaction,
-            <Self as ModalCommand>::Values::from_vec(values).expect("Menus have a static number of fields"),
-        ).await
+        match <Self as ModalCommand>::Values::from_vec(values) {
+            Ok(values) => ModalCommand::run(
+                self,
+                state,
+                interaction,
+                values,
+            ).await,
+            Err(e) => interaction.respond(&state, format!("{e:?}"))
+                .await
+                .map_err(Into::into),
+        }
     }
 }
 

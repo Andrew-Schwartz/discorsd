@@ -136,6 +136,8 @@ bitflags! {
         const PARTNERED_SERVER_OWNER = 1 << 1;
         const HYPESQUAD_EVENTS = 1 << 2;
         const BUG_HUNTER_LEVEL_1 = 1 << 3;
+        /// Undocumented, but can be sent by discord
+        const UNDOCUMENTED_32 = 1 << 5;
         const HOUSE_BRAVERY = 1 << 6;
         const HOUSE_BRILIANCE = 1 << 7;
         const HOUSE_BALANCE = 1 << 8;

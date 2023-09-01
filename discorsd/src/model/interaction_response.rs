@@ -256,6 +256,15 @@ impl ModalBuilder<0> {
     }
 }
 
+impl ModalBuilder<1> {
+    pub fn with_input<S: Into<Cow<'static, str>>>(title: S, input: TextInput) -> Self {
+        Self {
+            title: title.into(),
+            inputs: [input],
+        }
+    }
+}
+
 impl<const N: usize> ModalBuilder<N> {
     pub fn with_inputs<S: Into<Cow<'static, str>>>(title: S, inputs: [TextInput; N]) -> Self {
         Self {

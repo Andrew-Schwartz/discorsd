@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter, Write};
@@ -779,117 +778,33 @@ pub enum AllowedMentionType {
     Everyone,
 }
 
-pub trait TextMarkup {
-    fn italicize(self) -> String;
-    fn bold(self) -> String;
-    fn underline(self) -> String;
-    fn strikethrough(self) -> String;
-    fn code_inline(self) -> String;
-    fn code_block(self, lang: &str) -> String;
-}
-
-fn surround_string(mut string: String, surround: &str) -> String {
-    string.insert_str(0, surround);
-    string.push_str(surround);
-    string
-}
-
-impl TextMarkup for String {
-    fn italicize(self) -> String {
-        surround_string(self, "*")
-    }
-
-    fn bold(self) -> String {
-        surround_string(self, "**")
-    }
-
-    fn underline(self) -> String {
-        surround_string(self, "__")
-    }
-
-    fn strikethrough(self) -> String {
-        surround_string(self, "~~")
-    }
-
-    fn code_inline(self) -> String {
-        surround_string(self, "`")
-    }
-
-    fn code_block(mut self, lang: &str) -> String {
-        self.insert_str(0, &format!("{lang}\n"));
-        surround_string(self, "```")
-    }
-}
-
-impl<'a> TextMarkup for &'a str {
-    fn italicize(self) -> String {
+pub trait TextMarkup: Display {
+    fn italicize(&self) -> String {
         format!("*{self}*")
     }
 
-    fn bold(self) -> String {
+    fn bold(&self) -> String {
         format!("**{self}**")
     }
 
-    fn underline(self) -> String {
+    fn underline(&self) -> String {
         format!("__{self}__")
     }
 
-    fn strikethrough(self) -> String {
+    fn strikethrough(&self) -> String {
         format!("~~{self}~~")
     }
 
-    fn code_inline(self) -> String {
+    fn code_inline(&self) -> String {
         format!("`{self}`")
     }
 
-    fn code_block(self, lang: &str) -> String {
+    fn code_block(&self, lang: &str) -> String {
         format!("```{lang}\n{self}```")
     }
 }
 
-impl<'a> TextMarkup for Cow<'a, str> {
-    fn italicize(self) -> String {
-        match self {
-            Cow::Borrowed(b) => b.italicize(),
-            Cow::Owned(o) => o.italicize(),
-        }
-    }
-
-    fn bold(self) -> String {
-        match self {
-            Cow::Borrowed(b) => b.bold(),
-            Cow::Owned(o) => o.bold(),
-        }
-    }
-
-    fn underline(self) -> String {
-        match self {
-            Cow::Borrowed(b) => b.underline(),
-            Cow::Owned(o) => o.underline(),
-        }
-    }
-
-    fn strikethrough(self) -> String {
-        match self {
-            Cow::Borrowed(b) => b.strikethrough(),
-            Cow::Owned(o) => o.strikethrough(),
-        }
-    }
-
-    fn code_inline(self) -> String {
-        match self {
-            Cow::Borrowed(b) => b.code_inline(),
-            Cow::Owned(o) => o.code_inline(),
-        }
-    }
-
-    fn code_block(self, lang: &str) -> String {
-        match self {
-            Cow::Borrowed(b) => b.code_block(lang),
-            Cow::Owned(o) => o.code_block(lang),
-        }
-    }
-}
+impl<D: Display> TextMarkup for D {}
 
 #[derive(Default, Copy, Clone, Eq, PartialEq)]
 pub enum TimestampStyle {

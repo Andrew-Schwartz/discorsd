@@ -335,15 +335,14 @@ pub struct TextInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<usize>,
     /// Whether this component is required to be filled (defaults to true)
-    #[serde(default, skip_serializing_if = "bool::is_false")]
+    #[serde(default, skip_serializing_if = "bool::is_true")]
     pub required: bool,
     /// Pre-filled value for this component; max 4000 characters
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    // todo change placeholder to use Cow like Menu?
     /// Custom placeholder text if the input is empty; max 100 characters
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub placeholder: Option<String>,
+    pub placeholder: Option<Cow<'static, str>>,
 }
 
 serde_repr! {
@@ -353,7 +352,6 @@ serde_repr! {
     }
 }
 
-// todo add more fns?
 impl TextInput {
     pub(crate) const fn blank() -> Self {
         Self {
@@ -362,7 +360,7 @@ impl TextInput {
             label: Cow::Borrowed(""),
             min_length: None,
             max_length: None,
-            required: false,
+            required: true,
             value: None,
             placeholder: None,
         }
@@ -376,22 +374,38 @@ impl TextInput {
         }
     }
 
-    /// text that appears over the text input, max 45 characters
-    pub fn label<S: Into<Cow<'static, str>>>(&mut self, label: S) {
-        self.label = label.into();
+    pub fn new_short<S: Into<Cow<'static, str>>>(label: S) -> Self {
+        Self::new(label, TextInputStyle::Short)
     }
 
-    /// one of button styles
-    pub fn style(&mut self, style: TextInputStyle) {
-        self.style = style;
+    pub fn new_paragraph<S: Into<Cow<'static, str>>>(label: S) -> Self {
+        Self::new(label, TextInputStyle::Paragraph)
+    }
+
+    pub fn min_length(self, min: usize) -> Self  {
+        Self { min_length: Some(min), ..self }
+    }
+
+    pub fn max_length(self, max: usize) -> Self  {
+        Self { max_length: Some(max), ..self }
+    }
+
+    pub fn min_max_length(self, min: usize, max: usize) -> Self {
+        self.min_length(min)
+            .max_length(max)
     }
 
     #[must_use]
     pub fn optional(self) -> Self {
-        Self {
-            required: false,
-            ..self
-        }
+        Self { required: false, ..self }
+    }
+
+    pub fn value(self, value: String) -> Self {
+        Self { value: Some(value), ..self }
+    }
+
+    pub fn placeholder<S: Into<Cow<'static, str>>>(self, placeholder: S) -> Self {
+        Self { placeholder: Some(placeholder.into()), ..self }
     }
 }
 

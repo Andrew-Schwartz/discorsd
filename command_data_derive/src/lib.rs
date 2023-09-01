@@ -455,6 +455,7 @@ mod enum_data;
 mod enum_choices;
 mod menu_command;
 mod button_command;
+mod modal;
 
 /// See crate level documentation for general info, and the
 /// [Documentation_For_Field](Documentation_For_Field!),
@@ -485,13 +486,11 @@ pub fn derive_data(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let tokens = match input.data {
+    match input.data {
         Data::Struct(data) => struct_data::struct_impl(&ty, generics, data.fields, &input.attrs),
         Data::Enum(data) => enum_data::enum_impl(&ty, generics, data, &input.attrs),
         Data::Union(_) => abort!(ty, "Can't derive `CommandData` on a Union"),
-    };
-
-    tokens.into()
+    }.into()
 }
 
 /// See crate level documentation for general info, and the
@@ -504,7 +503,7 @@ pub fn derive_option(input: TokenStream) -> TokenStream {
     let ty = input.ident;
     dummy_impl(&ty);
 
-    let tokens = match input.data {
+    match input.data {
         Data::Struct(_) => abort!(
             ty,
             "Can't derive `CommandDataChoices` on a Struct (yet?)",
@@ -514,9 +513,7 @@ pub fn derive_option(input: TokenStream) -> TokenStream {
             ty,
             "Can't derive `CommandDataChoices` on a Union",
         ),
-    };
-
-    tokens.into()
+    }.into()
 }
 
 fn dummy_impl(ty: &Ident) {
@@ -575,7 +572,7 @@ pub fn derive_menu(input: TokenStream) -> TokenStream {
     let ty = input.ident;
     // todo dummy impl
 
-    let tokens = match input.data {
+    match input.data {
         Data::Struct(_) => abort!(
             ty,
             "Can't derive `MenuCommand` on a Struct"
@@ -585,9 +582,21 @@ pub fn derive_menu(input: TokenStream) -> TokenStream {
             ty,
             "Can't derive `MenuCommand` on a Union"
         ),
-    };
+    }.into()
+}
 
-    tokens.into()
+#[proc_macro_derive(Modal, attributes(menu))]
+#[proc_macro_error]
+pub fn derive_modal(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let ty = input.ident;
+    // todo dummy impl
+
+    match input.data {
+        Data::Struct(_) => modal::modal_impl(&ty, ),
+        Data::Enum(_) => abort!(ty, "Can't derive `Modal` on an Enum"),
+        Data::Union(_) => abort!(ty, "Can't derive `Modal` on a Union"),
+    }.into()
 }
 
 // handle_attributes! invoked here to generate documentation
