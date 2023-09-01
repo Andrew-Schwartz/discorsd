@@ -179,6 +179,8 @@ bitflags! {
         const SEND_VOICE_MESSAGES = 1 << 46;
         /// Undocumented
         const UNKNOWN_47 = 1 << 47;
+        /// Undocumented, observed on [`Role`](Role)
+        const UNKNOWN_48 = 1 << 48;
     }
 }
 
