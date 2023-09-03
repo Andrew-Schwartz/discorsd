@@ -427,6 +427,7 @@
     // pedantic
     clippy::wildcard_imports,
     clippy::too_many_lines,
+    clippy::match_bool,
 )]
 // @formatter:on
 
@@ -443,6 +444,7 @@ use enum_choices::Variant as ChoicesVariant;
 use menu_command::Variant as MenuVariant;
 use menu_command::Enum as MenuEnum;
 use enum_data::{Enum, Variant};
+use modal::{Struct as ModalStruct, Field as ModalField};
 use struct_data::*;
 
 use crate::utils::TypeExt;
@@ -585,7 +587,7 @@ pub fn derive_menu(input: TokenStream) -> TokenStream {
     }.into()
 }
 
-#[proc_macro_derive(Modal, attributes(menu))]
+#[proc_macro_derive(Modal, attributes(modal))]
 #[proc_macro_error]
 pub fn derive_modal(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -593,7 +595,7 @@ pub fn derive_modal(input: TokenStream) -> TokenStream {
     // todo dummy impl
 
     match input.data {
-        Data::Struct(_) => modal::modal_impl(&ty, ),
+        Data::Struct(data) => modal::modal_impl(&ty, data, &input.attrs),
         Data::Enum(_) => abort!(ty, "Can't derive `Modal` on an Enum"),
         Data::Union(_) => abort!(ty, "Can't derive `Modal` on a Union"),
     }.into()
@@ -630,7 +632,7 @@ handle_attribute! {
         /// and `va_count` (with a [`{str}`](macro.Documentation_For_Field.html#va_count) or
         /// [`{int}`](macro.Documentation_For_Field.html#va_count-1)), and
         /// [`va_req`](macro.Documentation_For_Field.html#va_req) for otherwise setting up varargs.
-        ["va_ordinals" => self.vararg.get_or_insert_with(Default::default).names = VarargNames::Ordinals],
+        ["va_ordinals" => self.vararg.get_or_insert_with(Default::default).names = VarargNames::Ordinals];
 
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), .. }), path =>
         /// What to rename this field as in the Command.
@@ -712,7 +714,7 @@ handle_attribute! {
         /// and `va_count` (with a [`{str}`](macro.Documentation_For_Field.html#va_count) or
         /// [`{int}`](macro.Documentation_For_Field.html#va_count-1)), and
         /// [`va_req`](macro.Documentation_For_Field.html#va_req) for otherwise setting up varargs.
-        ["va_names" => self.vararg.get_or_insert_with(Default::default).names = VarargNames::Function(str.parse()?)],
+        ["va_names" => self.vararg.get_or_insert_with(Default::default).names = VarargNames::Function(str.parse()?)];
 
     " = {int}": Meta::NameValue(MetaNameValue { path, lit: Lit::Int(int), .. }), path =>
         /// The minimum value permitted for integer fields
@@ -728,7 +730,7 @@ handle_attribute! {
             None
         } else {
             Some(int.base10_parse()?)
-        }],
+        }];
 }
 
 handle_attribute! {
@@ -757,7 +759,7 @@ handle_attribute! {
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), .. }), path =>
         /// Specify the type of the `SlashCommand` that this is data for. Useful for annotations that
         /// can make decisions at runtime by taking functions callable as `fn(&CommandType) -> SomeType`.
-        ["command" => self.command_type = Some(str.parse()?)],
+        ["command" => self.command_type = Some(str.parse()?)];
 }
 
 handle_attribute! {
@@ -777,6 +779,7 @@ handle_attribute! {
     /// }
     /// ```
     self: Variant =>
+
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), .. }), path =>
         /// The description of this command option.
         ["desc" => self.desc = Some(str)]
@@ -784,7 +787,7 @@ handle_attribute! {
         ["rename" => self.rename = Some(str)]
         /// The path to a function callable as `fn(&CommandType) -> bool` to determine whether to
         /// enable this variant's option in Discord.
-        ["enable_if" => self.enable_if = Some(str.parse()?)],
+        ["enable_if" => self.enable_if = Some(str.parse()?)];
 }
 
 handle_attribute! {
@@ -813,10 +816,11 @@ handle_attribute! {
     ///
     /// All variants will be shown as lowercase in Discord.
     self: Enum =>
+
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), .. }), path =>
         /// Specify the type of the `SlashCommand` that this is data for. Useful for annotations that
         /// can make decisions at runtime by taking functions callable as `fn(CommandType) -> SomeType`.
-        ["command" => self.command_type = Some(str.parse()?)],
+        ["command" => self.command_type = Some(str.parse()?)];
 }
 
 handle_attribute! {
@@ -837,32 +841,58 @@ handle_attribute! {
     /// All variants must be unit structs.
     ///
     self: ChoicesVariant =>
+
     "": Meta::Path(path), path =>
         /// Implement `Default` for this enum, with this field as the default.
-        ["default" => self.default = true],
+        ["default" => self.default = true];
 
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), .. }), path =>
         /// The string to show in Discord for this choice. Useful when you want to display a multiple
         /// word choice.
-        ["choice" => self.choice = Some(str)],
+        ["choice" => self.choice = Some(str)];
 }
 
 handle_attribute! {
     /// Attributes on a MenuData enum variant
     // todo
     self: MenuVariant =>
+
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), ..}), path =>
         /// The label to show in Discord for this choice, as well as for the `Display` impl
         ["label" => self.label = Some(str)]
         /// The description to show in Discord for this choice
-        ["desc" => self.description = Some(str)],
+        ["desc" => self.description = Some(str)];
 }
 
 handle_attribute! {
     /// Attributes on a MenuData enum
     // todo
     self: MenuEnum =>
+
     "": Meta::Path(path), path =>
         /// Don't impl Display for this type
-        ["skip_display" => self.skip_display = true],
+        ["skip_display" => self.skip_display = true];
+}
+
+handle_attribute! {
+    /// todo document
+    self: ModalStruct =>
+
+    " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), ..}), path =>
+        /// The title to show for the modal, if adding spaces between PascalCase (=> Pascal Case)
+        /// isn't what is desired.
+        ["title" => self.title = Some(str)];
+}
+
+handle_attribute! {
+    /// todo document
+    self: ModalField =>
+
+    "": Meta::Path(path), path =>
+        // todo maybe this should be = {str} so that user can specify the type of the option
+        // /// Make this field in the modal optional. If the type is literally `Option`, this is
+        // /// inferred. If `Option` has been renamed, this will still
+        // ["optional" => self.optional = self.ty.generic_type().cloned()]
+        /// Make this field show up with a paragraph text box instead of a one line text box
+        ["long" => self.long = true];
 }

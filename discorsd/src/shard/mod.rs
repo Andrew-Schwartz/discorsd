@@ -294,11 +294,8 @@ impl<B: Bot + 'static> Shard<B> {
             // immediately terminate the connection with any close code besides `1000` (Normal) or
             // `1001` (Away), then reconnect and attempt to Resume.
             if heartbeat > ack {
-                // if heartbeat.checked_duration_since(ack).is_some() {
-                //     self.strikes += 1;
                 // todo reset ack to None I think
                 println!("self.strikes = {:?}", self.strikes);
-                // if self.strikes >= 3 {
                 // self.reset_connection_state();
                 self.heartbeat = None;
                 self.ack = None;
@@ -306,10 +303,7 @@ impl<B: Bot + 'static> Shard<B> {
                     code: CloseCode::Restart,
                     reason: "ACK not recent enough, closing websocket".into(),
                 }, None).await;
-                // }
                 return Ok(ConnectionAction::Resume);
-            } else {
-                // self.strikes = 0;
             }
         }
 
@@ -418,6 +412,16 @@ impl<B: Bot + 'static> Shard<B> {
             self.resume_gateway = Some(resume);
 
             if self.state.global_slash_commands.get().is_none() {
+                fn set_commands<C: ?Sized>(
+                    app_commands: &mut Vec<ApplicationCommand>,
+                    commands: &[&'static C],
+                ) -> HashMap<CommandId, &'static C> {
+                    app_commands.drain(..commands.len())
+                        .zip_eq(commands)
+                        .map(|(ac, c)| (ac.id, *c))
+                        .collect()
+                }
+
                 let app = ready.application.id;
                 let client = &self.state.client;
 
@@ -435,15 +439,6 @@ impl<B: Bot + 'static> Shard<B> {
                         global_commands,
                     ).await
                     .unwrap();
-                fn set_commands<C: ?Sized>(
-                    app_commands: &mut Vec<ApplicationCommand>,
-                    commands: &[&'static C],
-                ) -> HashMap<CommandId, &'static C> {
-                    app_commands.drain(..commands.len())
-                        .zip_eq(commands)
-                        .map(|(ac, c)| (ac.id, *c))
-                        .collect()
-                }
                 self.state.global_slash_commands.get_or_init(|| set_commands(&mut commands, slash_commands));
                 self.state.global_user_commands.get_or_init(|| set_commands(&mut commands, user_commands));
                 self.state.global_message_commands.get_or_init(|| set_commands(&mut commands, message_commands));

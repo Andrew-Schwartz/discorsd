@@ -9,10 +9,10 @@ use serde::Serialize;
 use crate::BotState;
 use crate::commands::{ArrayLen, MenuData};
 use crate::commands::component_command::{ButtonCommand, MenuCommand};
-use crate::commands::modal_command::{ModalCommand, ModalCommandRaw};
+use crate::commands::modal_command::ModalCommand;
 use crate::http::channel::{embed, MessageAttachment, RichEmbed};
 use crate::model::command::Choice;
-use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, make_text_input, Menu, TextInput};
+use crate::model::components::{ActionRow, Button, Component, ComponentId, make_button, Menu, TextInput};
 use crate::model::message::{AllowedMentions, MessageFlags};
 use crate::serde_utils::BoolExt;
 
@@ -283,12 +283,12 @@ impl<const N: usize> ModalBuilder<N> {
 }
 
 macro_rules! add_field {
-    ($($(#[$meta:meta])? $n:literal),* $(,)*) => {
+    ($($(#[$allow_unused_comparisons:meta])? $n:literal),* $(,)*) => {
         $(
             impl ModalBuilder<$n> {
-                $(#[$meta])?
                 pub fn add_field(mut self, input: TextInput) -> ModalBuilder<{ $n + 1 }> {
                     const DEFAULT: TextInput = TextInput::blank();
+                    $(#[$allow_unused_comparisons])?
                     let mut arr = std::array::from_fn(|i| if i < $n {
                         mem::replace(&mut self.inputs[i], DEFAULT)
                     } else {
@@ -307,7 +307,7 @@ macro_rules! add_field {
 
 add_field!(#[allow(unused_comparisons)] 0, 1, 2, 3, 4);
 
-pub fn modal2<B, State, C, const N: usize>(
+pub fn modal<B, State, C, const N: usize>(
     state: State,
     command: C,
     mut builder: ModalBuilder<N>,
@@ -322,54 +322,4 @@ pub fn modal2<B, State, C, const N: usize>(
     let mut modal = builder.build();
     state.register_modal(&mut modal, Box::new(command));
     modal
-}
-
-pub fn modal<B, State, C, F>(state: State, command: C, builder: F) -> Modal
-    where B: 'static,
-          State: AsRef<BotState<B>>,
-          C: ModalCommandRaw<Bot=B>,
-          F: FnOnce(&mut Modal),
-{
-    let mut modal = Modal::build(builder);
-    state.as_ref().register_modal(&mut modal, Box::new(command));
-    modal
-}
-
-impl Modal {
-    // todo avoid code repetition?
-    pub fn build_with<F: FnOnce(&mut Self)>(mut with: Self, builder: F) -> Self {
-        builder(&mut with);
-        with
-    }
-
-    pub fn build<F: FnOnce(&mut Self)>(builder: F) -> Self {
-        Self::build_with(Self::default(), builder)
-    }
-
-    pub fn title<S: Into<Cow<'static, str>>>(&mut self, title: S) {
-        self.title = title.into();
-    }
-
-    pub fn text_input<B, State, F>(&mut self, state: State, builder: F)
-        where B: 'static,
-              State: AsRef<BotState<B>>,
-              F: FnOnce(&mut TextInput),
-    {
-        let mut text_input = make_text_input(builder);
-        state.as_ref().register_text_input(&mut text_input);
-        self.components.push(ActionRow::text_input(text_input));
-    }
-
-    // todo fix or delete?
-    /*
-    pub fn text_inputs<F,I>(&mut self, text_inputs: I)
-        where
-            F: FnOnce(&mut TextInput),
-            I: IntoIterator,
-    {
-        let text_inputs: Vec<TextInput> = text_inputs.into();
-        text_inputs.iter().map(|ti| {
-            self.components.push(ActionRow::text_input(ti));
-        });
-    }*/
 }

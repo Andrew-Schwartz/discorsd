@@ -760,18 +760,8 @@ impl OptionsLadder for InteractionDataOption {
     type Raise = Vec<Self>;
     type Lower = Lowest;
 
-    fn from_data_option(data: InteractionOption) -> Result<Self, CommandParseError> {
+    fn from_data_option(_: InteractionOption) -> Result<Self, CommandParseError> {
         unreachable!()
-        // println!("fdo: O");
-        // match data {
-        //     InteractionOption::Command(_) => Err(CommandParseError::BadGroupOccurrence),
-        //     InteractionOption::Group(_) => Err(CommandParseError::BadCommandOccurrence),
-        //     InteractionOption::Values(mut values) => {
-        //         warn!("This probably shouldn't be happening???");
-        //         warn!("values = {:?}", values);
-        //         Ok(values.remove(0))
-        //     }
-        // }
     }
 }
 

@@ -71,21 +71,27 @@ pub fn command_data_impl(command_type: Option<&Type>, generics: &[TypeParam]) ->
 }
 
 pub trait TypeExt {
+    /// get the first generic type of `self` as long as self matches the predicate (ex
+    /// `Type<A, B, C>` ->  `if pred(self) { A } else { None }`
     fn generic_type_by<F>(&self, pred: F) -> Option<&Type>
         where F: FnOnce(&Ident) -> bool;
 
+    /// get the first generic type of `self` as long as `self == ident`
     fn generic_type_of<I>(&self, ident: &I) -> Option<&Type>
         where I: ?Sized,
               Ident: PartialEq<I>, {
         self.generic_type_by(|i| i == ident)
     }
 
+    /// gets the first generic type of `self` (ex `Type<A, B, C>` -> `A`)
     fn generic_type(&self) -> Option<&Type> {
         self.generic_type_by(|_| true)
     }
 
+    /// for `[T; N]` returns `T`
     fn array_type(&self) -> Option<&Type>;
 
+    /// for `Type<A, B, ...>` returns `Type`
     fn without_generics(&self) -> Option<&Ident>;
 }
 

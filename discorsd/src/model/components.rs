@@ -382,14 +382,17 @@ impl TextInput {
         Self::new(label, TextInputStyle::Paragraph)
     }
 
+    #[must_use]
     pub fn min_length(self, min: usize) -> Self  {
         Self { min_length: Some(min), ..self }
     }
 
+    #[must_use]
     pub fn max_length(self, max: usize) -> Self  {
         Self { max_length: Some(max), ..self }
     }
 
+    #[must_use]
     pub fn min_max_length(self, min: usize, max: usize) -> Self {
         self.min_length(min)
             .max_length(max)
@@ -400,10 +403,12 @@ impl TextInput {
         Self { required: false, ..self }
     }
 
+    #[must_use]
     pub fn value(self, value: String) -> Self {
         Self { value: Some(value), ..self }
     }
 
+    #[must_use]
     pub fn placeholder<S: Into<Cow<'static, str>>>(self, placeholder: S) -> Self {
         Self { placeholder: Some(placeholder.into()), ..self }
     }

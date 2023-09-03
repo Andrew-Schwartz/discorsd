@@ -131,7 +131,7 @@ impl<B: Send + Sync> BotState<B> {
                 guild,
                 command.command(),
             ).await?;
-            let name = command.name();
+            // let name = command.name();
             self.slash_commands.write()
                 .await
                 .entry(guild)
