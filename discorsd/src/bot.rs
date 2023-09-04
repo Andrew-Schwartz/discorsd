@@ -18,7 +18,8 @@ use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use log::error;
+use chrono::Local;
+use log::{error, LevelFilter};
 use tokio::sync::RwLock;
 
 use crate::cache::Cache;
@@ -591,6 +592,19 @@ impl<B: Bot + 'static> From<B> for BotRunner<B> {
 
 impl<B: Bot + 'static> BotRunner<B> {
     async fn run(self) -> shard::ShardResult<()> {
+        use std::io::Write;
+
+        env_logger::builder()
+            .format(|f, record|
+                writeln!(f,
+                         "{} [{}] {}",
+                         Local::now().format("%d %T"),
+                         record.level(),
+                         record.args(),
+                ))
+            .filter(None, LevelFilter::Info)
+            .init();
+
         let mut handles = Vec::new();
         for mut shard in self.shards {
             let handle = tokio::spawn(async move {
