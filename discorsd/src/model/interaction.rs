@@ -5,7 +5,7 @@ use std::vec::IntoIter;
 
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::IdMap;
 use crate::model::channel::ChannelType;
@@ -507,7 +507,6 @@ pub struct MenuSelectData {
     pub resolved: ResolvedData,
 }
 
-// todo fix?
 #[derive(Deserialize, Debug, Clone)]
 pub struct TextSubmitData {
     /// the values submitted by the user

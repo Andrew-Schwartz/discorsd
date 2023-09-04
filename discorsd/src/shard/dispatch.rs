@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::cache::{Cache, IdMap, Update};
 use crate::model::auto_moderation::{Action, AutoModRule, TriggerType};
@@ -230,6 +230,7 @@ pub struct PartialApplication {
 }
 
 bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct ApplicationFlags: u32 {
         const GATEWAY_PRESENCE = 1 << 12;
         const GATEWAY_PRESENCE_LIMITED = 1 << 13;
@@ -427,6 +428,8 @@ impl Update for ChannelPinsUpdate {
     async fn update(&self, cache: &Cache) {
         let Self { guild_id, channel_id, last_pin_timestamp } = &self;
         let last_pin_timestamp = *last_pin_timestamp;
+        // don't forget that the lock on `channel_types` is held throughout all branches
+        #[allow(clippy::significant_drop_in_scrutinee)]
         match cache.channel_types.read().await.get(channel_id) {
             Some(ChannelType::Text) => {
                 cache.channels.write().await.entry(&channel_id)
@@ -1563,6 +1566,8 @@ impl Update for MessageUpdate {
             cache.users.write().await.insert(author);
         }
         let mut guard = cache.messages.write().await;
+        // don't forget that the lock on `channel_types` is held throughout all branches
+        #[allow(clippy::significant_drop_in_scrutinee)]
         match guard.entry(self.id) {
             Entry::Occupied(mut e) => {
                 fn update<T>(original: &mut T, new: Option<T>) {
@@ -1618,6 +1623,8 @@ pub struct MessageDelete {
 impl Update for MessageDelete {
     async fn update(&self, cache: &Cache) {
         cache.messages.write().await.remove(self.id);
+        // don't forget that the lock on `channel_types` is held throughout all branches
+        #[allow(clippy::significant_drop_in_scrutinee)]
         match cache.channel_types.read().await.get(&self.channel_id) {
             Some(ChannelType::Text) => {
                 if let Some(channel) = cache.channels.write().await.get_mut(self.channel_id) {

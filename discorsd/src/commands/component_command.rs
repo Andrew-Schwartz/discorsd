@@ -4,7 +4,7 @@ use downcast_rs::{Downcast, impl_downcast};
 use std::sync::Arc;
 use std::str::FromStr;
 use std::fmt::Debug;
-use crate::BotState;
+use crate::{Bot, BotState};
 use crate::errors::BotError;
 use crate::model::interaction::{ButtonPressData, MenuSelectData, MenuSelectDataRaw};
 pub use crate::model::commands::*;
@@ -12,12 +12,12 @@ pub use crate::model::commands::*;
 /// Not url buttons
 #[async_trait]
 pub trait ButtonCommand: Send + Sync + DynClone + Downcast {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<ButtonPressData, Unused>,
-    ) -> Result<InteractionUse<ButtonPressData, Used>, BotError>;
+    ) -> Result<InteractionUse<ButtonPressData, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 impl_downcast!(ButtonCommand assoc Bot);
@@ -29,12 +29,12 @@ impl<'clone, B> Clone for Box<dyn ButtonCommand<Bot=B> + 'clone> {
 
 #[async_trait]
 pub trait MenuCommandRaw: Send + Sync + DynClone + Downcast {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<MenuSelectDataRaw, Unused>,
-    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError>;
+    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 impl_downcast!(MenuCommandRaw assoc Bot);
@@ -46,7 +46,7 @@ impl<'clone, B> Clone for Box<dyn MenuCommandRaw<Bot=B> + 'clone> {
 
 #[async_trait]
 pub trait MenuCommand: Send + Sync + DynClone + Downcast {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
 
     type Data: MenuData + Send;
 
@@ -54,7 +54,7 @@ pub trait MenuCommand: Send + Sync + DynClone + Downcast {
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<MenuSelectData, Unused>,
                  data: Vec<Self::Data>,
-    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError>;
+    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 #[async_trait]
@@ -66,7 +66,7 @@ impl<M: MenuCommand> MenuCommandRaw for M
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  InteractionUse { id, application_id, data, channel, source, token, _priv }: InteractionUse<MenuSelectDataRaw, Unused>,
-    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError> {
+    ) -> Result<InteractionUse<MenuSelectData, Used>, BotError<<Self::Bot as Bot>::Error>> {
         let interaction = InteractionUse {
             id,
             application_id,

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
 use dyn_clone::DynClone;
 
-use crate::BotState;
+use crate::{Bot, BotState};
 use crate::errors::{BotError, CommandParseErrorInfo};
 use crate::http::ClientResult;
 use crate::model::command::{ApplicationCommand, Command, CommandOption};
@@ -65,7 +65,7 @@ pub use crate::model::commands::*;
 ///                  state: Arc<BotState<MyBot>>,
 ///                  interaction: InteractionUse<AppCommandData, Unused>,
 ///                  data: Self::Data
-///     ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError> {
+///     ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError<Self::Bot::Error>> {
 ///         interaction.respond(state, format!("received data: {:?}", data))
 ///                    .await
 ///                    .map_err(|e| e.into())
@@ -75,7 +75,7 @@ pub use crate::model::commands::*;
 #[async_trait]
 pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + SlashCommandRaw<Bot=<Self as SlashCommand>::Bot> {
     /// Your discord bot. Should probably implement [`Bot`](crate::Bot).
-    type Bot;
+    type Bot: Bot;
     /// The type of data this command has. Can be `()` for commands which have no arguments.
     /// Otherwise, the best way to implement `CommandData` for your data is with
     /// `#[derive(CommandData)]`.
@@ -116,7 +116,7 @@ pub trait SlashCommand: Sized + Send + Sync + Debug + Downcast + DynClone + Slas
                  state: Arc<BotState<<Self as SlashCommand>::Bot>>,
                  interaction: InteractionUse<AppCommandData, Unused>,
                  data: Self::Data,
-    ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError>;
+    ) -> Result<InteractionUse<AppCommandData, Self::Use>, BotError<<<Self as SlashCommand>::Bot as Bot>::Error>>;
 }
 
 #[async_trait]
@@ -143,7 +143,7 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<AppCommandData, Unused>,
                  data: InteractionOption,
-    ) -> Result<InteractionUse<AppCommandData, Used>, BotError> {
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError<<Self::Bot as Bot>::Error>> {
         match <<Self as SlashCommand>::Data as CommandData<Self>>::Options::from_data_option(data) {
             Ok(options) => match <Self as SlashCommand>::Data::from_options(options) {
                 Ok(data) => {
@@ -193,7 +193,7 @@ impl<SC: SlashCommand> SlashCommandRaw for SC
 /// This is implemented for all types which implement [SlashCommand].
 #[async_trait]
 pub trait SlashCommandRaw: Send + Sync + Debug + Downcast + DynClone {
-    type Bot;
+    type Bot: Bot;
 
     fn name(&self) -> &'static str;
 
@@ -203,7 +203,7 @@ pub trait SlashCommandRaw: Send + Sync + Debug + Downcast + DynClone {
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<AppCommandData, Unused>,
                  data: InteractionOption,
-    ) -> Result<InteractionUse<AppCommandData, Used>, BotError>;
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 impl_downcast!(SlashCommandRaw assoc Bot);

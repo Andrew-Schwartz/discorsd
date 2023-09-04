@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_derive::{Deserialize, Serialize};
 use serde::de::{Error, Visitor};
 
 use crate::cache::Cache;
@@ -11,6 +12,7 @@ use crate::model::guild::GuildMember;
 use crate::model::ids::*;
 pub use crate::model::ids::RoleId;
 bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct Permissions: u64 {
 		/// Allows creation of instant invites
         ///
@@ -294,7 +296,7 @@ impl<'de> Deserialize<'de> for Permissions {
 
 impl Serialize for Permissions {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        self.bits.serialize(s)
+        self.bits().serialize(s)
     }
 }
 

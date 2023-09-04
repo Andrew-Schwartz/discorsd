@@ -433,21 +433,19 @@
 
 use proc_macro::TokenStream;
 
+use enum_choices::Variant as ChoicesVariant;
+use enum_data::{Enum, Variant};
+use menu_command::Enum as MenuEnum;
+use menu_command::Variant as MenuVariant;
+use modal::{Field as ModalField, Struct as ModalStruct};
 use proc_macro2::{Ident, Span};
 use proc_macro_error::*;
 use quote::quote;
+use struct_data::{Field, FieldIdent, Struct, VarargNames, VarargNum};
 use syn::{Data, DeriveInput, GenericParam, parse_macro_input};
 // for handle_attributes!
 use syn::{Lit, Meta, MetaList, MetaNameValue, NestedMeta};
-
-use enum_choices::Variant as ChoicesVariant;
-use menu_command::Variant as MenuVariant;
-use menu_command::Enum as MenuEnum;
-use enum_data::{Enum, Variant};
-use modal::{Struct as ModalStruct, Field as ModalField};
-use struct_data::*;
-
-use crate::utils::TypeExt;
+use utils::TypeExt;
 
 #[macro_use]
 mod macros;
@@ -470,7 +468,7 @@ mod modal;
 pub fn derive_data(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ty = input.ident;
-    dummy_impl(&ty);
+    dummy_command_impl(&ty);
 
     let generics = input.generics.params.into_iter()
         .map(|g| match g {
@@ -503,7 +501,7 @@ pub fn derive_data(input: TokenStream) -> TokenStream {
 pub fn derive_option(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ty = input.ident;
-    dummy_impl(&ty);
+    dummy_command_impl(&ty);
 
     match input.data {
         Data::Struct(_) => abort!(
@@ -518,7 +516,7 @@ pub fn derive_option(input: TokenStream) -> TokenStream {
     }.into()
 }
 
-fn dummy_impl(ty: &Ident) {
+fn dummy_command_impl(ty: &Ident) {
     let fail_enum = Ident::new(&format!("{ty}DeriveFailed"), Span::call_site());
     set_dummy(quote! {
         enum #fail_enum {}
@@ -572,19 +570,45 @@ fn dummy_impl(ty: &Ident) {
 pub fn derive_menu(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ty = input.ident;
-    // todo dummy impl
+    dummy_menu_impl(&ty);
 
     match input.data {
-        Data::Struct(_) => abort!(
-            ty,
-            "Can't derive `MenuCommand` on a Struct"
-        ),
+        Data::Struct(_) => abort!(ty, "Can't derive `MenuCommand` on a Struct"),
         Data::Enum(data) => menu_command::menu_impl(&ty, data, &input.attrs),
-        Data::Union(_) => abort!(
-            ty,
-            "Can't derive `MenuCommand` on a Union"
-        ),
+        Data::Union(_) => abort!(ty, "Can't derive `MenuCommand` on a Union"),
     }.into()
+}
+
+fn dummy_menu_impl(ty: &Ident) {
+    set_dummy(quote! {
+        impl ::std::str::FromStr for #ty {
+            type Err = ::std::boxed::Box<str>;
+
+            fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
+                unimplemented!()
+            }
+        }
+
+        impl ::std::fmt::Display for #ty {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                unimplemented!()
+            }
+        }
+
+        impl ::discorsd::commands::MenuData for #ty {
+            type Data = ::std::string::String;
+
+            fn into_option(self) -> ::discorsd::model::components::SelectOption {
+                unimplemented!()
+            }
+            fn all() -> ::std::vec::Vec<Self> {
+                unimplemented!()
+            }
+            fn options() -> ::std::vec::Vec<::discorsd::model::components::SelectOption> {
+                unimplemented!()
+            }
+        }
+    });
 }
 
 #[proc_macro_derive(Modal, attributes(modal))]
@@ -592,13 +616,31 @@ pub fn derive_menu(input: TokenStream) -> TokenStream {
 pub fn derive_modal(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ty = input.ident;
-    // todo dummy impl
+    dummy_modal_impl(&ty);
 
     match input.data {
         Data::Struct(data) => modal::modal_impl(&ty, data, &input.attrs),
         Data::Enum(_) => abort!(ty, "Can't derive `Modal` on an Enum"),
         Data::Union(_) => abort!(ty, "Can't derive `Modal` on a Union"),
     }.into()
+}
+
+fn dummy_modal_impl(ty: &Ident) {
+    set_dummy(quote! {
+        impl<const N: usize> ::discorsd::commands::modal_command::ArrayLen<N> for #ty {}
+
+        impl #ty {
+            pub fn builder() -> ::discorsd::model::interaction_response::ModalBuilder<0> {
+                unimplemented!()
+            }
+        }
+
+        impl ::discorsd::commands::modal_command::ModalValues for #ty {
+            fn from_vec(vec: ::std::vec::Vec<::std::string::String>) -> ::core::result::Result<Self, ::std::borrow::Cow<'static, str>> {
+                unimplemented!()
+            }
+        }
+    });
 }
 
 // handle_attributes! invoked here to generate documentation
@@ -854,7 +896,7 @@ handle_attribute! {
 
 handle_attribute! {
     /// Attributes on a MenuData enum variant
-    // todo
+    // todo docs
     self: MenuVariant =>
 
     " = {str}": Meta::NameValue(MetaNameValue { path, lit: Lit::Str(str), ..}), path =>
@@ -866,7 +908,7 @@ handle_attribute! {
 
 handle_attribute! {
     /// Attributes on a MenuData enum
-    // todo
+    // todo document
     self: MenuEnum =>
 
     "": Meta::Path(path), path =>

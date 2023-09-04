@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde_derive::{Serialize, Deserialize};
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub enum Locale {

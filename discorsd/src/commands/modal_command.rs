@@ -8,7 +8,7 @@ use downcast_rs::{Downcast, impl_downcast};
 use dyn_clone::DynClone;
 use itertools::Itertools;
 
-use crate::BotState;
+use crate::{Bot, BotState};
 use crate::errors::BotError;
 pub use crate::model::commands::*;
 use crate::model::components::ComponentId;
@@ -70,14 +70,14 @@ impl ModalValues for String {
 
 #[async_trait]
 pub trait ModalCommand: Send + Sync + DynClone + Downcast + ModalCommandRaw<Bot=<Self as ModalCommand>::Bot> {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
     type Values: ModalValues;
 
     async fn run(&self,
                  state: Arc<BotState<<Self as ModalCommand>::Bot>>,
                  interaction: InteractionUse<ComponentId, Unused>,
                  values: Self::Values,
-    ) -> Result<InteractionUse<ComponentId, Used>, BotError>;
+    ) -> Result<InteractionUse<ComponentId, Used>, BotError<<<Self as ModalCommand>::Bot as Bot>::Error>>;
 }
 
 #[async_trait]
@@ -90,7 +90,7 @@ impl<MC: ModalCommand> ModalCommandRaw for MC
         &self,
         state: Arc<BotState<Self::Bot>>,
         interaction: InteractionUse<ModalSubmitData, Unused>,
-    ) -> Result<InteractionUse<ComponentId, Used>, BotError> {
+    ) -> Result<InteractionUse<ComponentId, Used>, BotError<<Self::Bot as Bot>::Error>> {
         let InteractionUse { id, application_id, data, channel, source, token, _priv } = interaction;
         let values = data.components.into_iter()
             .map(|ActionRowData::ActionRow { mut components }| {
@@ -125,12 +125,12 @@ impl<MC: ModalCommand> ModalCommandRaw for MC
 
 #[async_trait]
 pub trait ModalCommandRaw: Send + Sync + DynClone + Downcast {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
 
     async fn run(&self,
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<ModalSubmitData, Unused>,
-    ) -> Result<InteractionUse<ComponentId, Used>, BotError>;
+    ) -> Result<InteractionUse<ComponentId, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 impl_downcast!(ModalCommandRaw assoc Bot);

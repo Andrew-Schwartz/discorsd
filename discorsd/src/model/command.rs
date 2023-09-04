@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::model::commands::{CommandData};
 use crate::commands::slash_command::SlashCommandRaw;
@@ -290,7 +290,6 @@ impl<T> Choice<T> {
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Default)]
 pub struct SubCommandGroup {
     /// the subcommands in this subcommand group
-    // todo this can only be SubCommand
     #[serde(default, rename = "options")]
     pub sub_commands: Vec<SubCommandOption>,
 }

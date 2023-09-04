@@ -22,6 +22,8 @@
     clippy::missing_panics_doc,
     // nursery
     clippy::missing_const_for_fn,
+    // todo re-enable when it has less false positives
+    clippy::significant_drop_tightening
 )]
 // @formatter:on
 

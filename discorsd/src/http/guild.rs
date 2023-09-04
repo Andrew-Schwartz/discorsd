@@ -3,7 +3,7 @@
 //! Use these [`impl DiscordClient`](../struct.DiscordClient.html#impl-1) methods for the low level api
 //! for channel related requests.
 
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::BotState;
 use crate::http::{ClientResult, DiscordClient};

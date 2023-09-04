@@ -1,28 +1,12 @@
 use std::borrow::Cow;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::model::channel::ChannelType;
 use crate::model::emoji::Emoji;
 use crate::model::ids::{ChannelId, MentionableId, RoleId, UserId};
 use crate::serde_utils::{BoolExt, SkipUnit};
-
-// todo can this be deleted?
-/*
-#[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(untagged)]
-pub enum Components {
-    Inline(Vec<ActionRow>),
-    /// currently only the TextInput component is supported
-    Modal {
-        /// a developer-defined identifier for the modal, max 100 characters
-        custom_id: ComponentId,
-        /// the title of the popup modal, max 45 characters
-        title: String,
-        /// between 1 and 5 (inclusive) components that make up the modal
-        components: Vec<Component>,
-    },
-}*/
 
 serde_num_tag! {
     #[derive(Debug, Clone, PartialEq)]
@@ -42,7 +26,8 @@ impl ActionRow {
     pub fn buttons(buttons: Vec<Button>) -> Self {
         Self::new(buttons.into_iter()
             .map(Component::Button)
-            .collect())
+            .collect()
+        )
     }
 
     pub fn menu<T: SelectMenuType>(menu: Menu<T>) -> Self
@@ -72,7 +57,6 @@ serde_repr! {
 serde_num_tag! {
     #[derive(Debug, Clone, PartialEq)]
     pub enum Component = "type": ComponentType {
-        // (ComponentType::ActionRow) = ActionRow(ActionRow), // todo add? (for modal)
         (ComponentType::Button) = Button(Button),
         (ComponentType::StringMenu) = SelectString(Menu<String>),
         (ComponentType::TextInput) = TextInput(TextInput),
@@ -112,7 +96,7 @@ impl<S> From<S> for ComponentId
     }
 }
 
-// todo have custom_id and url as an enum of some sort
+// todo have custom_id and url as an enum of some sort?
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Button {
     /// one of button styles

@@ -9,11 +9,13 @@ use std::time::Duration;
 
 use async_tungstenite::tungstenite::http::StatusCode;
 use backoff::ExponentialBackoff;
+use base64::Engine;
 use log::{error, warn};
 use reqwest::{Client, Method, multipart};
 use reqwest::header::{AUTHORIZATION, HeaderMap};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_derive::Serialize;
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -422,7 +424,7 @@ impl ImageData {
         if let Some(image) = image {
             match tokio::fs::read(path).await {
                 Ok(file) => {
-                    Ok(Self(format!("data:image/{};base64,{}", image, base64::encode(file))))
+                    Ok(Self(format!("data:image/{};base64,{}", image, base64::engine::general_purpose::STANDARD.encode(file))))
                 }
                 Err(e) => Err(ImageHashError::Io(e)),
             }

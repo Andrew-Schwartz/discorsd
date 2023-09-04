@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use std::fmt::{Display, Formatter, Write};
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::model::channel::{Channel, ChannelType};
 use crate::model::components::ActionRow;
@@ -262,6 +262,7 @@ impl MessageReference {
 }
 
 bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct MessageFlags: u16 {
         /// this message has been published to subscribed channels (via Channel Following)
 		const CROSSPOSTED = 1 << 0;

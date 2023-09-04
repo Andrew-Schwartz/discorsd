@@ -3,8 +3,8 @@ use std::fmt;
 use std::fmt::Debug;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
+use std::sync::OnceLock;
 
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
@@ -23,7 +23,7 @@ use crate::shard::dispatch::PartialApplication;
 pub struct Cache {
     // not a OnceCell because the User can be updated
     pub(crate) user: RwLock<Option<User>>,
-    pub(crate) application: OnceCell<PartialApplication>,
+    pub(crate) application: OnceLock<PartialApplication>,
 
     pub(crate) users: RwLock<IdMap<User>>,
 
@@ -230,7 +230,6 @@ pub struct DebugCache<'a> {
     dms: RwLockReadGuard<'a, (HashMap<UserId, ChannelId>, IdMap<DmChannel>)>,
     categories: RwLockReadGuard<'a, IdMap<CategoryChannel>>,
     news: RwLockReadGuard<'a, IdMap<AnnouncementChannel>>,
-    // stores: RwLockReadGuard<'a, IdMap<StoreChannel>>,
     messages: RwLockReadGuard<'a, IdMap<Message>>,
     interaction_responses: RwLockReadGuard<'a, HashMap<InteractionId, Message>>,
     commands: RwLockReadGuard<'a, IdMap<InteractionData<ApplicationCommandData>>>,

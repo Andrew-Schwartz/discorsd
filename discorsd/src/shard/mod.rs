@@ -40,8 +40,7 @@ pub type ShardResult<T> = Result<T, ShardError>;
 pub type WsStream = WebSocketStream<ConnectStream>;
 type WsError = async_tungstenite::tungstenite::Error;
 
-// todo prune
-//  huh what's that mean?
+// todo prune useless errors (esp Other)
 #[derive(Debug, Error)]
 pub enum ShardError {
     #[error("http error: {0}")]
@@ -160,7 +159,6 @@ impl<B: Bot + 'static> Shard<B> {
 
     async fn _run(&mut self) -> ShardResult<()> {
         // need to (re)connect
-        println!("self.stream.is_none() = {:?}", self.state.stream.read().await.is_none());
         if self.state.stream.read().await.is_none() {
             if self.gateway.is_none() {
                 let url = self.state.client.gateway_bot()
@@ -175,7 +173,6 @@ impl<B: Bot + 'static> Shard<B> {
             *self.state.stream.write().await = Some(stream);
         }
 
-        println!("(&self.session_id, &self.seq) = {:?}", (&self.session_id, &self.seq));
         if let (Some(session), &Some(seq)) = (&self.session_id, &self.seq) {
             let resume = Resume {
                 token: self.state.client.token.clone(),
@@ -201,7 +198,6 @@ impl<B: Bot + 'static> Shard<B> {
             Ok(ConnectionAction::None) => unreachable!(),
             Ok(ConnectionAction::Resume) => {
                 println!("RESUMING!");
-                println!("(&self.session_id, &self.seq) = {:?}", (&self.session_id, &self.seq));
                 self.close(CloseFrame {
                     code: CloseCode::Restart,
                     reason: "Initiating resume".into(),
@@ -210,7 +206,6 @@ impl<B: Bot + 'static> Shard<B> {
                     todo!("handle this?")
                 };
                 println!("resuming ({resume_gateway:?})");
-                println!("(&self.session_id, &self.seq) = {:?}", (&self.session_id, &self.seq));
                 let (stream, _): (WsStream, _) = connect_async(resume_gateway).await?;
                 *self.state.stream.write().await = Some(stream);
             }
@@ -294,7 +289,6 @@ impl<B: Bot + 'static> Shard<B> {
             // immediately terminate the connection with any close code besides `1000` (Normal) or
             // `1001` (Away), then reconnect and attempt to Resume.
             if heartbeat > ack {
-                // todo reset ack to None I think
                 println!("self.strikes = {:?}", self.strikes);
                 // self.reset_connection_state();
                 self.heartbeat = None;
@@ -319,8 +313,7 @@ impl<B: Bot + 'static> Shard<B> {
         Ok(ConnectionAction::None)
     }
 
-    // todo that should probably just be communicated through ShardError::NeedsRestart
-    /// handles `payload`, returns `true` if we need to reconnect
+    /// handles `payload`, returns if we need to reconnect
     async fn handle_payload(&mut self, payload: Payload) -> ShardResult<ConnectionAction> {
         let need_reconnect = match payload {
             Payload::Hello(HelloPayload { heartbeat_interval }) => {

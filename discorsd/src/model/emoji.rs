@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt;
 
 use futures::{StreamExt, TryStreamExt};
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::http::{ClientResult, DiscordClient};
 use crate::model::{Gif, ImageFormat, Png};

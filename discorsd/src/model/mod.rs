@@ -2,7 +2,7 @@
 
 use std::fmt::{self, Display};
 
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
 use guild::Guild;
@@ -324,7 +324,7 @@ impl ImageFormat for Gif {
 
 // #[cfg(test)]
 // mod tag_by_num {
-//     use serde::{Deserialize, Serialize};
+//     use serde_derive::{Deserialize, Serialize};
 //
 //     use crate::model::ids::*;
 //

@@ -8,7 +8,7 @@ macro_rules! cdn {
 macro_rules! api {
     (VERSION) => { 10 };
     (@priv str $fmt:literal) => {
-        concat!("https://discord.com/api/v", api!(VERSION), $fmt)
+        std::concat!("https://discord.com/api/v", api!(VERSION), $fmt)
     };
     ($fmt:literal) => {
         api!(@priv str $fmt).to_string()
@@ -35,7 +35,7 @@ macro_rules! serde_bitflag {
     ($bitflag:ty: $repr:ty) => {
         impl serde::ser::Serialize for $bitflag {
             fn serialize<S: serde::ser::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-                self.bits.serialize(s)
+                self.bits().serialize(s)
             }
         }
 
@@ -243,7 +243,7 @@ macro_rules! serde_num_tag {
         [ $rename:literal ]
         [ $tag_name:literal, $tag_type:ty ]
     ) => {
-        #[derive(::serde::Serialize)]
+        #[derive(::serde_derive::Serialize)]
         struct Shim<'t, T> {
             #[serde(rename = $tag_name)]
             variant: $tag_type,
@@ -256,7 +256,7 @@ macro_rules! serde_num_tag {
         [ ]
         [ $tag_name:literal, $tag_type:ty ]
     ) => {
-        #[derive(::serde::Serialize)]
+        #[derive(::serde_derive::Serialize)]
         struct Shim<'t, T> {
             #[serde(rename = $tag_name)]
             variant: $tag_type,
@@ -282,7 +282,7 @@ macro_rules! serde_num_tag {
         $tag_value:expr;
         $s:expr
     ) => {
-        #[derive(::serde::Serialize)]
+        #[derive(::serde_derive::Serialize)]
         struct Shim<'a> {
             #[serde(rename = $tag_name)]
             variant: $tag_type,
@@ -379,7 +379,7 @@ macro_rules! serde_num_tag {
                                 $($tag_value)+ => {
                                     // extra stuff for handling braced variants
                                     $(
-                                        #[derive(::serde::Deserialize)]
+                                        #[derive(::serde_derive::Deserialize)]
                                         struct Shim {
                                             $(
                                                 $(#[serde($struct_field_serde)])*
@@ -416,7 +416,7 @@ macro_rules! serde_num_tag {
             {
                 impl ::serde::Serialize for $enum_name {
                     fn serialize<S: ::serde::Serializer>(&self, s: S) -> ::std::result::Result<S::Ok, S::Error> {
-                        #[derive(::serde::Serialize)]
+                        #[derive(::serde_derive::Serialize)]
                         struct UnitShim {
                             #[serde(rename = $tag_name)]
                             variant: $tag_type,
@@ -464,7 +464,7 @@ macro_rules! serde_num_tag {
 mod tag_by_num {
     use std::fmt::Debug;
 
-    use serde::{Deserialize, Serialize};
+    use serde_derive::{Deserialize, Serialize};
     use serde::de::DeserializeOwned;
 
     use crate::model::ids::*;

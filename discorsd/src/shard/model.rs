@@ -1,8 +1,9 @@
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 
-use serde::{de, Deserialize, Serialize, Serializer};
+use serde::{de, Serialize, Serializer};
 use serde::ser::{Error, SerializeMap};
+use serde_derive::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 use crate::model::emoji::Emoji;
@@ -592,6 +593,7 @@ pub struct Secrets {
 }
 
 bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct ActivityFlags: u8 {
         const INSTANCE = 1 << 0;
         const JOIN = 1 << 1;

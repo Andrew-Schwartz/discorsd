@@ -12,13 +12,13 @@
 //! `DiscordClient` or `&DiscordClient`.
 
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt::{self, Debug};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use log::error;
-use once_cell::sync::OnceCell;
 use tokio::sync::RwLock;
 
 use crate::cache::Cache;
@@ -62,11 +62,11 @@ pub struct BotState<B: 'static> {
     // /// The [`SlashCommand`](SlashCommand) ids your bot has created, by name in each guild.
     // pub command_names: RwLock<GuildIdMap<HashMap<&'static str, CommandId>>>,
     /// The global [`SlashCommand`](SlashCommand)s your b2ot has created.
-    pub global_slash_commands: OnceCell<HashMap<CommandId, &'static dyn SlashCommandRaw<Bot=B>>>,
+    pub global_slash_commands: OnceLock<HashMap<CommandId, &'static dyn SlashCommandRaw<Bot=B>>>,
     /// The global [`UserCommand`](UserCommand)s your bot has created.
-    pub global_user_commands: OnceCell<HashMap<CommandId, &'static dyn UserCommand<Bot=B>>>,
+    pub global_user_commands: OnceLock<HashMap<CommandId, &'static dyn UserCommand<Bot=B>>>,
     /// The global [`MessageCommand`](MessageCommand)s your bot has created.
-    pub global_message_commands: OnceCell<HashMap<CommandId, &'static dyn MessageCommand<Bot=B>>>,
+    pub global_message_commands: OnceLock<HashMap<CommandId, &'static dyn MessageCommand<Bot=B>>>,
     // /// The global [`SlashCommand`](SlashCommand) ids your bot has created, by name.
     // pub global_command_names: OnceCell<HashMap<&'static str, CommandId>>,
     // /// The global [`UserCommand`](UserCommand) ids your bot has created, by name.
@@ -74,7 +74,7 @@ pub struct BotState<B: 'static> {
     // /// The global [`MessageCommand`](MessageCommand) ids your bot has created, by name.
     // pub global_message_command_names: OnceCell<HashMap<&'static str, CommandId>>,
     /// The [`ReactionCommand`](ReactionCommand)s your bot is using.
-    pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<B>>>>,
+    pub reaction_commands: RwLock<Vec<Box<dyn ReactionCommand<Bot=B>>>>,
     pub buttons: std::sync::RwLock<HashMap<ComponentId, Box<dyn ButtonCommand<Bot=B>>>>,
     pub menus: std::sync::RwLock<HashMap<ComponentId, Box<dyn MenuCommandRaw<Bot=B>>>>,
     pub modals: std::sync::RwLock<HashMap<ComponentId, Box<dyn ModalCommandRaw<Bot=B>>>>,
@@ -114,7 +114,7 @@ impl<B> BotState<B> {
     }
 }
 
-impl<B: Send + Sync> BotState<B> {
+impl<B: Bot + Send + Sync> BotState<B> {
     pub async fn register_guild_commands<G, I>(
         &self,
         guild: G,
@@ -331,6 +331,8 @@ impl<B: Debug> Debug for BotState<B> {
 #[allow(unused)]
 #[async_trait]
 pub trait Bot: Send + Sync + Sized {
+    type Error: Error + Send + Sync;
+
     /// Register your Discord bot's token. This is the only method you are required to implement,
     /// though your bot will be very boring if you don't implement any other methods.
     fn token(&self) -> String;
@@ -353,30 +355,31 @@ pub trait Bot: Send + Sync + Sized {
 
     fn guild_commands() -> Vec<Box<dyn SlashCommandRaw<Bot=Self>>> { Vec::new() }
 
-    async fn ready(&self, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn ready(&self, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn resumed(&self, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn resumed(&self, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn guild_create(&self, guild: Guild, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn guild_create(&self, guild: Guild, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn message_create(&self, message: Message, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn message_create(&self, message: Message, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn message_update(&self, message: Message, state: Arc<BotState<Self>>, updates: MessageUpdate) -> Result<(), BotError> { Ok(()) }
+    async fn message_update(&self, message: Message, state: Arc<BotState<Self>>, updates: MessageUpdate) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn interaction(&self, interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
+    async fn interaction(&self, interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> {
         Self::handle_interaction(interaction, state).await
     }
 
-    async fn reaction(&self, reaction: ReactionUpdate, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn reaction(&self, reaction: ReactionUpdate, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn integration_update(&self, guild: GuildId, integration: Integration, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn integration_update(&self, guild: GuildId, integration: Integration, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn role_create(&self, guild: GuildId, role: Role, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn role_create(&self, guild: GuildId, role: Role, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn role_update(&self, guild: GuildId, role: Role, state: Arc<BotState<Self>>) -> Result<(), BotError> { Ok(()) }
+    async fn role_update(&self, guild: GuildId, role: Role, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> { Ok(()) }
 
-    async fn error(&self, error: BotError, state: Arc<BotState<Self>>) {
-        error!("{}", error.display_error(&state).await);
+    async fn error(&self, error: BotError<Self::Error>, state: Arc<BotState<Self>>) {
+        let err = error.display_error(&state).await;
+        error!("{}", err);
     }
 }
 
@@ -391,7 +394,7 @@ pub trait BotExt: Bot + 'static {
     /// Respond to an interaction with the matching [SlashCommand]. Should likely be used in the
     /// [Bot::interaction](Bot::interaction) method.
     #[allow(clippy::too_many_lines)]
-    async fn handle_interaction(interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError> {
+    async fn handle_interaction(interaction: interaction::Interaction, state: Arc<BotState<Self>>) -> Result<(), BotError<Self::Error>> {
         match interaction {
             interaction::Interaction::Ping => println!("PING!"),
             interaction::Interaction::ApplicationCommand(data) => {

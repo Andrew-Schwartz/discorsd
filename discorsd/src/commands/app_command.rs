@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
 use dyn_clone::DynClone;
+use crate::Bot;
 
 use crate::bot::BotState;
 use crate::errors::BotError;
@@ -15,12 +16,11 @@ use crate::model::user::User;
 
 #[async_trait]
 pub trait UserCommand: Send + Sync + Debug + DynClone + Downcast {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
 
     // todo add user command name field? (const prevents downcast)
     // const NAME: &'static str;
 
-    // todo update name()?
     fn name(&self) -> &'static str;
 
     fn command(&self) -> Command {
@@ -32,7 +32,7 @@ pub trait UserCommand: Send + Sync + Debug + DynClone + Downcast {
                  interaction: InteractionUse<AppCommandData, Unused>,
                  target: User,
                  guild_member: Option<PartialGuildMember>,
-    ) -> Result<InteractionUse<AppCommandData, Used>, BotError>;
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 impl_downcast!(UserCommand assoc Bot);
@@ -44,12 +44,11 @@ impl<'clone, B> Clone for Box<dyn UserCommand<Bot=B> + 'clone> {
 
 #[async_trait]
 pub trait MessageCommand: Send + Sync + Debug + DynClone + Downcast {
-    type Bot: Send + Sync;
+    type Bot: Bot + Send + Sync;
 
     // todo add message command name field? (const prevents downcast)
     // const NAME: &'static str;
 
-    // todo update name()?
     fn name(&self) -> &'static str;
 
     fn command(&self) -> Command {
@@ -60,7 +59,7 @@ pub trait MessageCommand: Send + Sync + Debug + DynClone + Downcast {
                  state: Arc<BotState<Self::Bot>>,
                  interaction: InteractionUse<AppCommandData, Unused>,
                  target: Message,
-    ) -> Result<InteractionUse<AppCommandData, Used>, BotError>;
+    ) -> Result<InteractionUse<AppCommandData, Used>, BotError<<Self::Bot as Bot>::Error>>;
 }
 
 impl_downcast!(MessageCommand assoc Bot);

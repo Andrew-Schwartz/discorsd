@@ -13,9 +13,10 @@ use crate::model::ids::sealed::IsId;
 const DISCORD_EPOCH: u64 = 1_420_070_400_000;
 
 macro_rules! id_impl {
-    ($($id:tt),+ $(,)?) => {
+    ($(/*$(#[$doc:meta])?*/ $id:tt),+ $(,)?) => {
         $(
             #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+            // $(#[$doc])?
             pub struct $id(pub u64);
 
             impl $id {
@@ -27,7 +28,7 @@ macro_rules! id_impl {
 
                     let dt = NaiveDateTime::from_timestamp_opt(seconds as _, nanos as _)
                                 .expect("parsing id datetime should work");
-                    DateTime::from_utc(dt, Utc)
+                    DateTime::from_naive_utc_and_offset(dt, Utc)
                 }
             }
 

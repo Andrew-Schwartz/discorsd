@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::model::ids::*;
 pub use crate::model::ids::ChannelId;
@@ -182,6 +182,7 @@ pub struct TextChannel {
 id_impl!(TextChannel => id: ChannelId);
 
 bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct ChannelFlags: u8 {
         /// this thread is pinned to the top of its parent GUILD_FORUM channel
 	    const PINNED = 1 << 1;

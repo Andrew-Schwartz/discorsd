@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::model::guild::Integration;
 use crate::model::ids::*;
@@ -130,6 +130,7 @@ pub trait UserMarkup: Id<Id=UserId> {
 impl<I: Id<Id=UserId>> UserMarkup for I {}
 
 bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct UserFlags: u32 {
         const NONE = 0;
         const DISCORD_EMPLOYEE = 1 << 0;

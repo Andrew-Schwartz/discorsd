@@ -10,17 +10,17 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use crate::{BotState, utils};
+use crate::BotState;
 use crate::commands::slash_command::SlashCommandRaw;
 use crate::errors::*;
 use crate::http::{ClientResult, DiscordClient};
 use crate::http::interaction::WebhookMessage;
-use crate::model::{command, ids::*, interaction};
+use crate::model::{command, ids::*};
 use crate::model::command::{Choice, CommandDataOption, CommandOption, OptionData, OptionType, SubCommandGroupOption, SubCommandOption};
 use crate::model::components::{ComponentId, SelectMenuType, SelectOption};
 use crate::model::guild::GuildMember;
-use crate::model::interaction::{ButtonPressData, DataOption, DmUser, GuildUser, HasValue, InteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw, TextSubmitData, ModalSubmitData, SubCommand, SubCommandGroup, Token};
-use crate::model::interaction_response::{InteractionMessage, Modal, InteractionResponse};
+use crate::model::interaction::{ButtonPressData, DataOption, DmUser, GuildUser, HasValue, InteractionDataOption, InteractionOption, InteractionUser, MenuSelectData, MenuSelectDataRaw, ModalSubmitData, SubCommand, SubCommandGroup, TextSubmitData, Token};
+use crate::model::interaction_response::{InteractionMessage, InteractionResponse, Modal};
 use crate::model::message::{Attachment, Message};
 use crate::model::user::User;
 
@@ -158,8 +158,6 @@ impl<D: InteractionPayload, U: Usability> InteractionUse<D, U> {
 }
 
 // todo add autofill response
-// its not actually self, you dumb clippy::nursery
-#[allow(clippy::use_self)]
 impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
     pub(crate) fn new(
         id: InteractionId,
@@ -210,7 +208,6 @@ impl<Data: InteractionPayload> InteractionUse<Data, Unused> {
     }
 }
 
-#[allow(clippy::use_self)]
 impl<Data: ApplicationCommandData> InteractionUse<Data, Unused> {
     // todo double-check
     pub async fn respond_modal<Client, M>(self, client: Client, modal: M) -> ClientResult<InteractionUse<Data, Used>>
@@ -847,7 +844,7 @@ impl<C: SlashCommandRaw> CommandData<C> for Infallible {
 
 // let `()` be used for commands with no options
 impl<Command: SlashCommandRaw> CommandData<Command> for () {
-    type Options = Vec<interaction::InteractionDataOption>;
+    type Options = Vec<InteractionDataOption>;
 
     fn from_options(_: Self::Options) -> Result<Self, CommandParseError> {
         Ok(())
@@ -885,17 +882,17 @@ impl<C: SlashCommandRaw, T: CommandData<C>> CommandData<C> for Option<T> {
 
 impl<T, C, S> CommandData<C> for HashSet<T, S>
     where
-        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption> + Eq + Hash,
+        T: CommandData<C, VecArg=CommandDataOption, Options=InteractionDataOption> + Eq + Hash,
         C: SlashCommandRaw,
         S: BuildHasher + Default,
 {
-    type Options = Vec<interaction::InteractionDataOption>;
+    type Options = Vec<InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         options.into_iter().map(T::from_options).collect()
     }
 
-    type VecArg = command::CommandDataOption;
+    type VecArg = CommandDataOption;
 
     fn make_args(c: &C) -> Vec<Self::VecArg> {
         T::make_args(c)
@@ -915,16 +912,16 @@ impl<T, C, S> CommandData<C> for HashSet<T, S>
 
 impl<T, C> CommandData<C> for BTreeSet<T>
     where
-        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption> + Ord,
+        T: CommandData<C, VecArg=CommandDataOption, Options=InteractionDataOption> + Ord,
         C: SlashCommandRaw,
 {
-    type Options = Vec<interaction::InteractionDataOption>;
+    type Options = Vec<InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         options.into_iter().map(T::from_options).collect()
     }
 
-    type VecArg = command::CommandDataOption;
+    type VecArg = CommandDataOption;
 
     fn make_args(c: &C) -> Vec<Self::VecArg> {
         T::make_args(c)
@@ -945,16 +942,16 @@ impl<T, C> CommandData<C> for BTreeSet<T>
 #[allow(clippy::use_self)]
 impl<T, C> CommandData<C> for Vec<T>
     where
-        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption>,
+        T: CommandData<C, VecArg=CommandDataOption, Options=InteractionDataOption>,
         C: SlashCommandRaw,
 {
-    type Options = Vec<interaction::InteractionDataOption>;
+    type Options = Vec<InteractionDataOption>;
 
     fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
         options.into_iter().map(T::from_options).collect()
     }
 
-    type VecArg = command::CommandDataOption;
+    type VecArg = CommandDataOption;
 
     fn make_args(c: &C) -> Vec<Self::VecArg> {
         T::make_args(c)
@@ -974,19 +971,23 @@ impl<T, C> CommandData<C> for Vec<T>
 
 impl<T, C, const N: usize> CommandData<C> for [T; N]
     where
-        T: CommandData<C, VecArg=command::CommandDataOption, Options=interaction::InteractionDataOption>,
+        T: CommandData<C, VecArg=CommandDataOption, Options=InteractionDataOption>,
         C: SlashCommandRaw,
 {
-    type Options = Vec<interaction::InteractionDataOption>;
+    type Options = Vec<InteractionDataOption>;
 
-    fn from_options(options: Self::Options) -> Result<Self, CommandParseError> {
-        let iter = options.into_iter().map(T::from_options);
-        utils::array_try_from_iter(iter, |i| CommandParseError::MissingOption(
-            format!("Didn't have option number {}", i + 1)
-        ))
+    fn from_options(options: Vec<InteractionDataOption>) -> Result<Self, CommandParseError> {
+        let n_recv = options.len();
+        options.into_iter()
+            .map(T::from_options)
+            .collect::<Result<Vec<_>, _>>()?
+            .try_into()
+            .map_err(|_| CommandParseError::MissingOption(
+                format!("Received {n_recv} options, expected {N}")
+            ))
     }
 
-    type VecArg = command::CommandDataOption;
+    type VecArg = CommandDataOption;
 
     fn make_args(command: &C) -> Vec<Self::VecArg> {
         T::make_args(command)

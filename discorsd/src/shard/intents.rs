@@ -5,6 +5,7 @@ bitflags! {
     /// [Identify::intents](crate::shard::model::Identify::intents).
     ///
     /// See [Discord's documentation](https://discord.com/developers/docs/topics/gateway#gateway-intents) for more details.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct Intents: u32 {
         const GUILDS = 1 << 0;
         const GUILD_MEMBERS = 1 << 1;
@@ -26,7 +27,7 @@ bitflags! {
         const AUTO_MODERATION_CONFIGURATION = 1 << 20;
         const AUTO_MODERATION_ACTION_EXECUTION = 1 << 21;
 
-        const PRIVELEGED = Self::GUILD_PRESENCES.bits | Self::GUILD_MEMBERS.bits | Self::MESSAGE_CONTENT.bits;
+        const PRIVELEGED = Self::GUILD_PRESENCES.bits() | Self::GUILD_MEMBERS.bits() | Self::MESSAGE_CONTENT.bits();
     }
 }
 serde_bitflag!(Intents: u32);

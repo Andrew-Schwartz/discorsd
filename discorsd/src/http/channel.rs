@@ -17,6 +17,7 @@ use reqwest::{IntoUrl, Url};
 use reqwest::multipart::{Form, Part};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_derive::Serialize;
 
 use crate::BotState;
 use crate::commands::MenuData;
@@ -383,6 +384,7 @@ impl ChannelMessageId {
         let mut message = message.into();
         message.reply(self.message);
         // todo check if this channel is in a guild
+        // huh? why?
         self.channel.send(state, message).await
     }
 }
@@ -1152,6 +1154,7 @@ impl RichEmbed {
     }
 
     // todo use array into_iter
+    //  not sure if that's actually a good idea?
     // todo when const-panicking or something exists, all of the types that impl Into<Field> will
     //  be const constructable, so this can take a &'static dyn Into<Field>
     /// Adds multiple fields to this embed. See [field](Self::field) for more information on adding
@@ -1303,8 +1306,7 @@ impl EditMessage {
     }
 }
 
-// todo put back when CLion understands the derive's again
-pub(in super) trait MessageWithFiles/*: Serialize*/ {
+pub(in super) trait MessageWithFiles: Serialize {
     fn files(&mut self) -> Option<&mut HashSet<MessageAttachment>>;
 
     fn embeds(&mut self) -> Option<&mut Vec<RichEmbed>>;
@@ -1326,10 +1328,8 @@ pub(in super) trait MessageWithFiles/*: Serialize*/ {
     fn has_other_content(&self) -> bool;
 }
 
-
 impl DiscordClient {
-    // todo remove this serialize when MWF has it as a supertrait again
-    pub(in super) async fn send_message_with_files<T: DeserializeOwned, M: MessageWithFiles + Send + Sync + Serialize>(
+    pub(in super) async fn send_message_with_files<T: DeserializeOwned, M: MessageWithFiles + Send + Sync>(
         &self,
         route: Route,
         mut message: M,

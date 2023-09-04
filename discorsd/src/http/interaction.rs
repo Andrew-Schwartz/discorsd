@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use serde::Serialize;
+use serde_derive::Serialize;
 
 use crate::BotState;
 use crate::commands::MenuData;

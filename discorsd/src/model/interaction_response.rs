@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::mem;
 use std::str::FromStr;
 
-use serde::Serialize;
+use serde_derive::Serialize;
 
 use crate::BotState;
 use crate::commands::{ArrayLen, MenuData};
@@ -25,9 +25,7 @@ serde_num_tag! { just Serialize =>
     /// their slash command show up as message in chat. This may be helpful for slash commands, or
     /// commands whose responses are asynchronous or ephemeral messages.
     #[derive(Debug, Clone)]
-    // todo make it be `"type": u8 as InteractionResponseType`
-    //  and then it generates InteractionResponseType as a `serde_repr`ed thing
-    pub enum InteractionResponse = "type": u8, inner = "data" {
+    pub enum InteractionResponse = "type": u8 as InteractionResponseType, inner = "data" {
         /// ACK a `Ping`
         (1) = Pong,
         /// respond to an interaction with a message
