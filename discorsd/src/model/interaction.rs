@@ -5,6 +5,7 @@ use std::vec::IntoIter;
 
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
+use serde::{Deserialize, Deserializer};
 use serde_derive::{Deserialize, Serialize};
 
 use crate::IdMap;
@@ -17,7 +18,7 @@ use crate::model::locales::Locale;
 use crate::model::message::{Attachment, Message};
 use crate::model::permissions::{Permissions, Role};
 use crate::model::user::User;
-use crate::serde_utils::null_as_t;
+use crate::serde_utils::null_as_default;
 
 serde_num_tag! { just Deserialize =>
     /// hi
@@ -226,6 +227,7 @@ impl TryFrom<Vec<InteractionOptionRaw>> for InteractionOption {
     type Error = &'static str;
 
     fn try_from(value: Vec<InteractionOptionRaw>) -> Result<Self, Self::Error> {
+        println!("value = {:?}", value);
         fn values(first: InteractionDataOption, rest: IntoIter<InteractionOptionRaw>) -> Result<InteractionOption, &'static str> {
             let vec = iter::once(Ok(first))
                 .chain(rest.map(|value| match value {
@@ -284,34 +286,6 @@ serde_num_tag! { just Deserialize =>
     }
 }
 
-// impl From<InteractionDataOption> for InteractionOption {
-//     fn from(value: InteractionDataOption) -> Self {
-//         match value {
-//             InteractionDataOption::String(d) => Self::String(d),
-//             InteractionDataOption::Integer(d) => Self::Integer(d),
-//             InteractionDataOption::Boolean(d) => Self::Boolean(d),
-//             InteractionDataOption::User(d) => Self::User(d),
-//             InteractionDataOption::Channel(d) => Self::Channel(d),
-//             InteractionDataOption::Role(d) => Self::Role(d),
-//             InteractionDataOption::Mentionable(d) => Self::Mentionable(d),
-//             InteractionDataOption::Number(d) => Self::Number(d),
-//             InteractionDataOption::Attachment(d) => Self::Attachment(d),
-//         }
-//     }
-// }
-//
-// impl From<InteractionSubCommandOption> for InteractionOption {
-//     fn from(InteractionSubCommandOption::SubCommand(d): InteractionSubCommandOption) -> Self {
-//         Self::SubCommand(d)
-//     }
-// }
-//
-// impl From<InteractionSubCommandGroupOption> for InteractionOption {
-//     fn from(InteractionSubCommandGroupOption::SubCommandGroup(d): InteractionSubCommandGroupOption) -> Self {
-//         Self::SubCommandGroup(d)
-//     }
-// }
-//
 serde_num_tag! { just Deserialize =>
     // old::ValueOption
     #[derive(Debug, Clone)]
@@ -349,10 +323,33 @@ impl InteractionDataOption {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct HasOptions<T> {
     /// Present if this option is a group or subcommand
     pub options: T,
+}
+
+mod __priv {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct HasOptionShim<T> {
+        options: T,
+    }
+
+    impl<'de> Deserialize<'de> for HasOptions<Vec<InteractionDataOption>> {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            let HasOptionShim { options } = HasOptionShim::deserialize(d)?;
+            Ok(Self { options })
+        }
+    }
+
+    impl<'de> Deserialize<'de> for HasOptions<DataOption<SubCommand>> {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            let HasOptionShim { mut options } = HasOptionShim::<Vec<_>>::deserialize(d)?;
+            Ok(Self { options: options.remove(0) })
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -364,6 +361,7 @@ pub struct HasValue<T> {
 pub trait OptionType {
     type Data;
 }
+
 macro_rules! data_type {
     (HasOptions<$opt:ty> => $($t:ty),+ $(,)?) => {
         $(
@@ -399,13 +397,13 @@ pub struct DataOption<T: OptionType> {
     /// 1-32 character name
     pub name: String,
     /// Localization dictionary for name field. Values follow the same restrictions as name
-    #[serde(deserialize_with = "null_as_t", default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(deserialize_with = "null_as_default", default)]
     pub name_localizations: HashMap<Locale, String>,
     /// value or sub options
     #[serde(flatten)]
     pub data: T::Data,
     /// true if this option is the currently focused option for autocomplete
-    #[serde(default, skip_serializing_if = "bool::is_true")]
+    #[serde(default)]
     pub focused: bool,
 }
 
@@ -524,7 +522,7 @@ pub struct ModalSubmitData {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::interaction::Interaction;
+    use crate::model::interaction::{ApplicationCommandData, Interaction};
 
     #[test]
     fn slash_command() {
@@ -903,5 +901,40 @@ mod tests {
     "version": 1
 }"#;
         serde_json::from_str::<Interaction>(MENU_INTERACTION).unwrap();
+    }
+
+    #[test]
+    fn command_group() {
+        const JSON: &'static str = r#"{
+      "type": 1,
+      "options": [
+        {
+          "type": 2,
+          "options": [
+            {
+              "type": 1,
+              "options": [
+                {
+                  "value": "1148347212850528367",
+                  "type": 7,
+                  "name": "channel"
+                },
+                {
+                  "value": "<@243418816510558208>",
+                  "type": 3,
+                  "name": "message"
+                }
+              ],
+              "name": "message"
+            }
+          ],
+          "name": "post"
+        }
+      ],
+      "name": "ll",
+      "id": "1149478264100884480",
+      "guild_id": "492122906864779274"
+    }"#;
+        serde_json::from_str::<ApplicationCommandData>(JSON).unwrap();
     }
 }

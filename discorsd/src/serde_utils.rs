@@ -146,10 +146,11 @@ impl BoolExt for bool {
     fn is_false(&self) -> bool { !*self }
 }
 
-pub fn null_as_t<'de, D, T>(d: D) -> Result<T, D::Error>
+pub fn null_as_default<'de, D, T>(d: D) -> Result<T, D::Error>
     where D: Deserializer<'de>,
           T: Default,
-          Option<T>: Deserialize<'de> {
+          Option<T>: Deserialize<'de>,
+{
     Ok(<Option<T>>::deserialize(d)?
         .unwrap_or_default())
 }

@@ -12,7 +12,7 @@ use crate::model::ids::{ApplicationId, ChannelId, CommandId, MentionableId, Role
 use crate::model::locales::Locale;
 use crate::model::message::Attachment;
 use crate::model::permissions::Permissions;
-use crate::serde_utils::null_as_t;
+use crate::serde_utils::null_as_default;
 
 // todo
 /// `CHAT_INPUT` command names and command option names must match the following regex
@@ -60,14 +60,14 @@ serde_num_tag! {
             /// Name of command, 1-32 characters
             name: Cow<'static, str>,
             /// Localization dictionary for name field. Values follow the same restrictions as name
-            #serde = deserialize_with = "null_as_t"
+            #serde = deserialize_with = "null_as_default"
             #serde = default
             #serde = skip_serializing_if = "HashMap::is_empty"
             name_localizations: HashMap<Locale, Cow<'static, str>>,
             /// Description of command, 1-100 characters
             description: Cow<'static, str>,
             /// Localization dictionary for description field. Values follow the same restrictions as description
-            #serde = deserialize_with = "null_as_t"
+            #serde = deserialize_with = "null_as_default"
             #serde = default
             #serde = skip_serializing_if = "HashMap::is_empty"
             description_localizations: HashMap<Locale, Cow<'static, str>>,
@@ -80,7 +80,7 @@ serde_num_tag! {
             /// Name of command, 1-32 characters
             name: Cow<'static, str>,
             /// Localization dictionary for name field. Values follow the same restrictions as name
-            #serde = deserialize_with = "null_as_t"
+            #serde = deserialize_with = "null_as_default"
             #serde = default
             #serde = skip_serializing_if = "HashMap::is_empty"
             name_localizations: HashMap<Locale, Cow<'static, str>>,
@@ -90,7 +90,7 @@ serde_num_tag! {
             /// Name of command, 1-32 characters
             name: Cow<'static, str>,
             /// Localization dictionary for name field. Values follow the same restrictions as name
-            #serde = deserialize_with = "null_as_t"
+            #serde = deserialize_with = "null_as_default"
             #serde = default
             #serde = skip_serializing_if = "HashMap::is_empty"
             name_localizations: HashMap<Locale, Cow<'static, str>>,
@@ -223,12 +223,12 @@ pub struct OptionData<T: OptionType> {
     /// 1-32 character name
     pub name: Cow<'static, str>,
     /// Localization dictionary for name field. Values follow the same restrictions as name
-    #[serde(deserialize_with = "null_as_t", default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(deserialize_with = "null_as_default", default, skip_serializing_if = "HashMap::is_empty")]
     pub name_localizations: HashMap<Locale, String>,
     /// 1-100 character description
     pub description: Cow<'static, str>,
     /// Localization dictionary for description field. Values follow the same restrictions as description
-    #[serde(deserialize_with = "null_as_t", default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(deserialize_with = "null_as_default", default, skip_serializing_if = "HashMap::is_empty")]
     pub description_localizations: HashMap<Locale, String>,
     /// Type specific extra data
     #[serde(flatten)]
@@ -268,7 +268,7 @@ pub struct Choice<T> {
     /// 1-32 character name
     pub name: Cow<'static, str>,
     /// Localization dictionary for name field. Values follow the same restrictions as name
-    #[serde(deserialize_with = "null_as_t", default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(deserialize_with = "null_as_default", default, skip_serializing_if = "HashMap::is_empty")]
     pub name_localizations: HashMap<Locale, String>,
     /// Value for the choice, up to 100 characters if string
     pub value: T,

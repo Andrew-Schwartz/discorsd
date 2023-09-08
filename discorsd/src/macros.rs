@@ -466,6 +466,7 @@ mod tag_by_num {
 
     use serde_derive::{Deserialize, Serialize};
     use serde::de::DeserializeOwned;
+    use serde::Serialize;
 
     use crate::model::ids::*;
 

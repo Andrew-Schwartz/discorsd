@@ -694,6 +694,7 @@ impl OptionsLadder for Highest {
     // todo should maybe just be self?
     type Raise = Self;
     type Lower = InteractionOption;
+    // todo?
 
     fn from_data_option(_: InteractionOption) -> Result<Self, CommandParseError> {
         unreachable!("should never have a `Highest`")
